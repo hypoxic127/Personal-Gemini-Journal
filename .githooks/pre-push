@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Pre-push security gate. Enable once per clone:
+#   git config core.hooksPath .githooks
+#
+# Implements the challenge guidance: "Set up git hooks to automatically run security
+# tests before redeploying to Cloud Run."
+
+set -euo pipefail
+
+remote="$1"
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$local_sha" = "0000000000000000000000000000000000000000" ] && continue
+
+  if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
+    range="$local_sha"                       # new branch: check every commit
+  else
+    range="$remote_sha..$local_sha"
+  fi
+
+  printf '\n\033[1mPre-push security check → %s\033[0m\n' "$remote"
+  bash "$(git rev-parse --show-toplevel)/scripts/security-check.sh" "$range" || exit 1
+done
+
+exit 0

@@ -1,0 +1,92 @@
+rules_version = '2';
+
+// Personal Gemini Journal — Firestore Security Rules
+//
+// These rules are written as if the backend did not exist. They are the last line of
+// defense, not a formality behind the API.
+//
+// All writes are performed by the Cloud Run backend through the Admin SDK, which
+// bypasses rules. Therefore, from a client's perspective: writes are denied everywhere,
+// and reads are confined to the caller's own subtree.
+//
+// Every change here requires a matching cross-user negative test in
+// test/firestore.rules.test.ts, in the same commit. This is enforced by .githooks/pre-commit.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- helpers ----------
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // The only valid ownership check: the uid in the signed token must equal the uid
+    // on the path. "Signed in" alone is never sufficient.
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // Roles come from the signed token's custom claim, never from a Firestore document.
+    // A document field could be forged if any write rule were ever loosened; a claim
+    // sits inside a signed token and cannot be.
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.role == 'admin';
+    }
+
+    // ---------- private user data ----------
+    // Read: owner only. Write: denied — every write goes through the backend Admin SDK
+    // after Zod validation, which is the only place client-forged fields can be stripped.
+
+    match /users/{uid} {
+      allow read:  if isOwner(uid);
+      allow write: if false;
+
+      // Conversation sessions
+      match /sessions/{sessionId} {
+        allow read:  if isOwner(uid);
+        allow write: if false;
+
+        // Multi-turn messages
+        match /messages/{messageId} {
+          allow read:  if isOwner(uid);
+          allow write: if false;
+        }
+      }
+
+      // Journal entries (summary, mood, optional location)
+      match /entries/{entryId} {
+        allow read:  if isOwner(uid);
+        allow write: if false;
+      }
+    }
+
+    // ---------- admin aggregates ----------
+    // De-identified statistics only: counts, distributions, trends. No journal text,
+    // no summaries, no messages, no uid list.
+    //
+    // Admins can read this. Admins cannot read anything under users/{uid}/** above —
+    // a negative test in the suite proves an admin-claim token is denied there.
+
+    match /aggregates/{docId} {
+      allow read:  if isAdmin();
+      allow write: if false;
+    }
+
+    // ---------- audit log ----------
+    // Backend-only, via the Admin SDK. No client access at all, admins included:
+    // an audit log an administrator can modify is not an audit log.
+
+    match /audit_logs/{logId} {
+      allow read, write: if false;
+    }
+
+    // ---------- default deny ----------
+    // Anything not explicitly matched above is unreachable. A new collection with a
+    // forgotten rule fails closed rather than falling through to open access.
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

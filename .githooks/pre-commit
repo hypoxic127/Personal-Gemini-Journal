@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Fast pre-commit checks (sub-second, no test runs). The full gate lives in pre-push.
+#   git config core.hooksPath .githooks
+
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+FAIL=0
+
+# No API key in the staged diff
+if git diff --cached | grep -E '^\+' | grep -q "AIza[0-9A-Za-z_-]\{20,\}"; then
+  printf '\033[31m✘ staged changes contain a Google API key\033[0m\n'
+  FAIL=1
+fi
+
+# No sensitive file staged
+staged=$(git diff --cached --name-only)
+if echo "$staged" | grep -E '(^|/)\.env$|(^|/)\.env\.[a-z]+$|service-account|serviceAccount|\.pem$|\.key$|\.p12$' \
+   | grep -v '\.env\.example$' | grep -q .; then
+  printf '\033[31m✘ sensitive files are staged:\033[0m\n'
+  echo "$staged" | grep -E '(^|/)\.env$|(^|/)\.env\.[a-z]+$|service-account|serviceAccount|\.pem$|\.key$|\.p12$' \
+    | grep -v '\.env\.example$' | sed 's/^/    /'
+  FAIL=1
+fi
+
+# A rules change must travel with its negative test
+if echo "$staged" | grep -q '^firestore.rules$'; then
+  if ! echo "$staged" | grep -q 'firestore.rules.test'; then
+    printf '\033[31m✘ firestore.rules changed without touching test/firestore.rules.test.ts\033[0m\n'
+    printf '   A rules change ships with its negative test. See .agents/skills/security-tdd/SKILL.md\n'
+    FAIL=1
+  fi
+fi
+
+[ "$FAIL" -eq 0 ] || { printf '\nCommit blocked.\n'; exit 1; }
+exit 0

@@ -1,0 +1,25 @@
+{
+  "name": "personal-gemini-journal",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "concurrently -n api,web -c blue,green \"pnpm -F @journal/api dev\" \"pnpm -F @journal/web dev\"",
+    "build": "pnpm -F @journal/shared build && pnpm -F @journal/web build && pnpm -F @journal/api build",
+    "start": "node api/dist/index.js",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "test:rules": "vitest run test/firestore.rules.test.ts",
+    "check": "bash scripts/security-check.sh"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^4.0.1",
+    "@types/node": "^22.10.2",
+    "concurrently": "^9.1.0",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

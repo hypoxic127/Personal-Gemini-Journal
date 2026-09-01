@@ -1,0 +1,57 @@
+# ---- Secrets and credentials: never committed ----
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+*service-account*.json
+*serviceAccount*.json
+*-credentials.json
+*.pem
+*.key
+*.p12
+.secrets/
+gha-creds-*.json
+
+# ---- Dependencies and build output ----
+node_modules/
+dist/
+build/
+.vite/
+*.tsbuildinfo
+
+# ---- Firebase / GCP local state ----
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+.firebaserc.local
+
+# ---- Tooling and editors ----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+coverage/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# ---- AI tooling local state (the constitution is committed; session state is not) ----
+.claude/settings.local.json
+.antigravity/local/
+
+# ---- Working notes: not part of the submission ----
+# Design docs, milestone plan, prompts, submission checklist. Private material that
+# produced the deliverable, not the deliverable itself. Contains personal contact
+# details and draft social posts — must never be published.
+notes/
+
+# AI Studio baseline export: large, and not a deliverable.
+# Screenshot evidence belongs in its own evidence/ directory.
+ai-studio-baseline/
+
+# Antigravity does not read this path; an early mistaken copy of .agents/skills/
+.antigravity/
