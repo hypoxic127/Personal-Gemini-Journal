@@ -12,6 +12,7 @@ import { db, FieldValue } from '../firebase.js';
 import { stripUndefined } from '../lib/sanitize.js';
 import { AppError } from '../lib/errors.js';
 import { logAuditEvent } from './audit.js';
+import { recordEntryAggregate } from './aggregates.js';
 
 /**
  * Every path in this file is built from the `uid` argument, which callers take from the
@@ -312,6 +313,19 @@ export async function finalizeSession(
 
     tx.set(userRef, { entryCount: FieldValue.increment(1) }, { merge: true });
   });
+
+  // Record atomic population statistics (non-blocking for session finalization response)
+  try {
+    await recordEntryAggregate(draft.mood);
+  } catch (aggErr) {
+    console.warn(
+      JSON.stringify({
+        timestamp: new Date().toISOString(),
+        event: 'AGGREGATE_RECORD_WARNING',
+        errorMessage: (aggErr as any)?.message,
+      })
+    );
+  }
 
   const now = new Date().toISOString();
   return {

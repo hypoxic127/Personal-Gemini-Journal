@@ -42,7 +42,10 @@ describe('Firestore Security Rules Matrix (Root Hardened Rules)', () => {
     }
   });
 
+  // =========================================================================
   // --- POSITIVE (AUTHORIZED) CASES ---
+  // =========================================================================
+
   it('POS-AUTH-01: User A can read own user doc', async () => {
     // Seed doc via Admin bypass
     await testEnv.withSecurityRulesDisabled(async (context) => {
@@ -83,15 +86,18 @@ describe('Firestore Security Rules Matrix (Root Hardened Rules)', () => {
     await assertSucceeds(userADb.doc('users/userA/sessions/s1/messages/m1').get());
   });
 
-  it('POS-ADM-01: User holding custom claim role:admin can read aggregates', async () => {
+  it('POS-ADM-01: Admin attempting to read /aggregates/daily_2026-09-02 is ALLOWED', async () => {
     await testEnv.withSecurityRulesDisabled(async (context) => {
-      await context.firestore().doc('aggregates/daily_2026-09-01').set({ totalEntries: 10 });
+      await context.firestore().doc('aggregates/daily_2026-09-02').set({ totalEntries: 10, activeUsers: 5 });
     });
     const adminDb = testEnv.authenticatedContext('adminUser', { role: 'admin' }).firestore();
-    await assertSucceeds(adminDb.doc('aggregates/daily_2026-09-01').get());
+    await assertSucceeds(adminDb.doc('aggregates/daily_2026-09-02').get());
   });
 
+  // =========================================================================
   // --- NEGATIVE (UNAUTHORIZED / ATTACK) CASES ---
+  // =========================================================================
+
   it('NEG-AUTH-01: Unauthenticated read on user document is DENIED', async () => {
     const unauthDb = testEnv.unauthenticatedContext().firestore();
     await assertFails(unauthDb.doc('users/userA').get());
@@ -100,6 +106,17 @@ describe('Firestore Security Rules Matrix (Root Hardened Rules)', () => {
   it('NEG-AUTH-02: Unauthenticated write on user document is DENIED', async () => {
     const unauthDb = testEnv.unauthenticatedContext().firestore();
     await assertFails(unauthDb.doc('users/userA').set({ role: 'admin' }));
+  });
+
+  it('NEG-ENT-01: User B LISTING User A entries collection is DENIED', async () => {
+    // Seeded with real documents so the query has something to return if the rule leaks —
+    // an empty collection would pass this test even against a broken rule.
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().doc('users/userA/entries/e1').set({ title: 'Private Entry' });
+      await context.firestore().doc('users/userA/entries/e2').set({ title: 'Private Entry 2' });
+    });
+    const userBDb = testEnv.authenticatedContext('userB').firestore();
+    await assertFails(userBDb.collection('users/userA/entries').get());
   });
 
   it('NEG-ENT-02: Client write on own entries is DENIED (Backend Admin SDK writes only)', async () => {
@@ -117,15 +134,16 @@ describe('Firestore Security Rules Matrix (Root Hardened Rules)', () => {
     await assertFails(userBDb.doc('users/userA/entries/entry1').get());
   });
 
-  it('NEG-ENT-01: User B LISTING User A entries collection is DENIED', async () => {
-    // Seeded with real documents so the query has something to return if the rule leaks —
-    // an empty collection would pass this test even against a broken rule.
-    await testEnv.withSecurityRulesDisabled(async (context) => {
-      await context.firestore().doc('users/userA/entries/e1').set({ title: 'Private Entry' });
-      await context.firestore().doc('users/userA/entries/e2').set({ title: 'Private Entry 2' });
-    });
+  it('NEG-ENT-04: User A attempting to self-elevate role in doc is DENIED', async () => {
+    const userADb = testEnv.authenticatedContext('userA').firestore();
+    await assertFails(userADb.doc('users/userA').update({ role: 'admin' }));
+  });
+
+  it('NEG-ENT-05: User B writing User A entry is DENIED', async () => {
     const userBDb = testEnv.authenticatedContext('userB').firestore();
-    await assertFails(userBDb.collection('users/userA/entries').get());
+    await assertFails(
+      userBDb.doc('users/userA/entries/e1').set({ title: 'Injected', moodScore: 5 })
+    );
   });
 
   it('NEG-SES-02: User B LISTING User A sessions and messages is DENIED', async () => {
@@ -138,8 +156,6 @@ describe('Firestore Security Rules Matrix (Root Hardened Rules)', () => {
     await assertFails(userBDb.collection('users/userA/sessions/s1/messages').get());
   });
 
-  // M2 begins writing to sessions/messages. These paths were already denied to clients by
-  // the existing rules; these cases pin that down before any code starts using them.
   it('NEG-SES-03: User A client-writing own session is DENIED (backend Admin SDK writes only)', async () => {
     const userADb = testEnv.authenticatedContext('userA').firestore();
     await assertFails(
@@ -162,13 +178,6 @@ describe('Firestore Security Rules Matrix (Root Hardened Rules)', () => {
     );
   });
 
-  it('NEG-ENT-05: User B writing User A entry is DENIED', async () => {
-    const userBDb = testEnv.authenticatedContext('userB').firestore();
-    await assertFails(
-      userBDb.doc('users/userA/entries/e1').set({ title: 'Injected', moodScore: 5 })
-    );
-  });
-
   it('NEG-USR-01: Any signed-in user LISTING the users collection is DENIED (no uid enumeration)', async () => {
     await testEnv.withSecurityRulesDisabled(async (context) => {
       await context.firestore().doc('users/userA').set({ displayName: 'Alice' });
@@ -178,36 +187,106 @@ describe('Firestore Security Rules Matrix (Root Hardened Rules)', () => {
     await assertFails(userBDb.collection('users').get());
   });
 
-  it('NEG-ENT-04: User A attempting to self-elevate role in doc is DENIED', async () => {
+  // =========================================================================
+  // --- MILESTONE 5: RBAC & ADMIN ISOLATION ATTACK CASES ---
+  // =========================================================================
+
+  it('NEG-ADM-01: Plain user attempting to read /aggregates/daily_2026-09-02 is DENIED', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().doc('aggregates/daily_2026-09-02').set({ totalEntries: 5 });
+    });
     const userADb = testEnv.authenticatedContext('userA').firestore();
-    await assertFails(userADb.doc('users/userA').update({ role: 'admin' }));
+    await assertFails(userADb.doc('aggregates/daily_2026-09-02').get());
   });
 
-  it('NEG-ADM-01: Plain user reading aggregates is DENIED', async () => {
+  it('NEG-ADM-02: Plain user attempting to write /aggregates/daily_2026-09-02 is DENIED', async () => {
     const userADb = testEnv.authenticatedContext('userA').firestore();
-    await assertFails(userADb.doc('aggregates/daily_2026-09-01').get());
+    await assertFails(
+      userADb.doc('aggregates/daily_2026-09-02').set({ totalEntries: 999 })
+    );
   });
 
-  it('NEG-ADM-04: Admin-claim user reading User A entries is DENIED (Admin sees aggregates, not content)', async () => {
+  it('NEG-ADM-03: Admin attempting to write /aggregates/daily_2026-09-02 is DENIED (client writes forbidden)', async () => {
     const adminDb = testEnv.authenticatedContext('adminUser', { role: 'admin' }).firestore();
-    await assertFails(adminDb.doc('users/userA/entries/entry1').get());
+    await assertFails(
+      adminDb.doc('aggregates/daily_2026-09-02').set({ totalEntries: 999 })
+    );
   });
 
-  it('NEG-ADM-07: Admin-claim user LISTING User A entries is DENIED (aggregates, never content)', async () => {
+  it('NEG-ADM-04: Admin attempting to read users/{userA}/entries/{entryId} is DENIED (Admin NEVER sees content)', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().doc('users/userA/entries/e1').set({
+        title: 'Secret Diary Entry',
+        summary: 'Deep personal thoughts',
+      });
+    });
+    const adminDb = testEnv.authenticatedContext('adminUser', { role: 'admin' }).firestore();
+    await assertFails(adminDb.doc('users/userA/entries/e1').get());
+  });
+
+  it('NEG-ADM-05: Admin attempting to read or write audit_logs/{logId} is DENIED (Client access forbidden)', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().doc('audit_logs/log1').set({ action: 'role.grant', actorUid: 'adminUser' });
+    });
+    const adminDb = testEnv.authenticatedContext('adminUser', { role: 'admin' }).firestore();
+    await assertFails(adminDb.doc('audit_logs/log1').get());
+    await assertFails(adminDb.doc('audit_logs/log1').set({ action: 'tampered' }));
+    await assertFails(adminDb.collection('audit_logs').get());
+  });
+
+  it('NEG-ADM-06: Plain user attempting to read or write audit_logs/{logId} is DENIED', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().doc('audit_logs/log1').set({ action: 'role.grant', actorUid: 'adminUser' });
+    });
+    const userADb = testEnv.authenticatedContext('userA').firestore();
+    await assertFails(userADb.doc('audit_logs/log1').get());
+    await assertFails(userADb.doc('audit_logs/log1').set({ action: 'tampered' }));
+    await assertFails(userADb.collection('audit_logs').get());
+  });
+
+  it('NEG-ADM-07: Admin attempting to list users/{userA}/entries is DENIED', async () => {
     await testEnv.withSecurityRulesDisabled(async (context) => {
       await context.firestore().doc('users/userA/entries/e1').set({ summary: 'Private summary' });
+      await context.firestore().doc('users/userA/entries/e2').set({ summary: 'Private summary 2' });
     });
     const adminDb = testEnv.authenticatedContext('adminUser', { role: 'admin' }).firestore();
     await assertFails(adminDb.collection('users/userA/entries').get());
   });
 
-  it('NEG-ADM-05: Admin reading audit_logs is DENIED (Audit logs are backend-only)', async () => {
+  it('NEG-ADM-08: Admin attempting to read users/{userA}/sessions/{sessionId}/messages/{messageId} is DENIED', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().doc('users/userA/sessions/s1/messages/m1').set({
+        text: 'Private conversation with model',
+        role: 'user',
+      });
+    });
     const adminDb = testEnv.authenticatedContext('adminUser', { role: 'admin' }).firestore();
-    await assertFails(adminDb.doc('audit_logs/log1').get());
+    await assertFails(adminDb.doc('users/userA/sessions/s1/messages/m1').get());
   });
 
-  it('NEG-ADM-06: Random collection read/write is DENIED (Default Deny)', async () => {
+  it('NEG-ADM-09: Admin attempting to list users/{userA}/sessions is DENIED', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().doc('users/userA/sessions/s1').set({ title: 'Private Session 1' });
+      await context.firestore().doc('users/userA/sessions/s2').set({ title: 'Private Session 2' });
+    });
+    const adminDb = testEnv.authenticatedContext('adminUser', { role: 'admin' }).firestore();
+    await assertFails(adminDb.collection('users/userA/sessions').get());
+  });
+
+  // =========================================================================
+  // --- DEFAULT DENY CATCH-ALL ---
+  // =========================================================================
+
+  it('NEG-DFLT-01: Admin/Plain user accessing unlisted collection unlisted_collection/doc1 is DENIED by default catch-all', async () => {
     const userADb = testEnv.authenticatedContext('userA').firestore();
-    await assertFails(userADb.doc('random_collection/doc1').get());
+    const adminDb = testEnv.authenticatedContext('adminUser', { role: 'admin' }).firestore();
+    const unauthDb = testEnv.unauthenticatedContext().firestore();
+
+    await assertFails(userADb.doc('unlisted_collection/doc1').get());
+    await assertFails(userADb.doc('unlisted_collection/doc1').set({ data: 'attack' }));
+    await assertFails(adminDb.doc('unlisted_collection/doc1').get());
+    await assertFails(adminDb.doc('unlisted_collection/doc1').set({ data: 'attack' }));
+    await assertFails(unauthDb.doc('unlisted_collection/doc1').get());
+    await assertFails(unauthDb.doc('unlisted_collection/doc1').set({ data: 'attack' }));
   });
 });

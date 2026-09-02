@@ -6,8 +6,8 @@ interface NavbarProps {
   user: User | null;
   role?: 'user' | 'admin';
   entryCount?: number;
-  activeView?: 'workspace' | 'insights' | 'map';
-  onViewChange?: (view: 'workspace' | 'insights' | 'map') => void;
+  activeView?: 'workspace' | 'insights' | 'map' | 'admin';
+  onViewChange?: (view: 'workspace' | 'insights' | 'map' | 'admin') => void;
   onSignOut: () => void;
   onNewReflection?: () => void;
   onOpenThreatModal: () => void;
@@ -56,6 +56,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         {onViewChange && (
           <nav className="flex items-center space-x-1 bg-[#EFECE6] p-0.5 sm:p-1 rounded-xl border border-[#DCD3C6]">
             <button
+              id="nav-workspace-btn"
               onClick={() => onViewChange('workspace')}
               className={`px-2.5 sm:px-3 py-1 rounded-lg text-[11px] sm:text-xs font-semibold transition-all cursor-pointer ${
                 activeView === 'workspace'
@@ -66,6 +67,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               Reflections
             </button>
             <button
+              id="nav-insights-btn"
               onClick={() => onViewChange('insights')}
               className={`px-2.5 sm:px-3 py-1 rounded-lg text-[11px] sm:text-xs font-semibold transition-all cursor-pointer ${
                 activeView === 'insights'
@@ -76,6 +78,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               Mood Insights
             </button>
             <button
+              id="nav-map-btn"
               onClick={() => onViewChange('map')}
               className={`px-2.5 sm:px-3 py-1 rounded-lg text-[11px] sm:text-xs font-semibold transition-all cursor-pointer ${
                 activeView === 'map'
@@ -85,6 +88,20 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               Mood Map
             </button>
+            {role === 'admin' && (
+              <button
+                id="nav-admin-btn"
+                onClick={() => onViewChange('admin')}
+                className={`px-2.5 sm:px-3 py-1 rounded-lg text-[11px] sm:text-xs font-semibold transition-all cursor-pointer flex items-center space-x-1.5 ${
+                  activeView === 'admin'
+                    ? 'bg-amber-800 text-[#FAF8F5] shadow-2xs'
+                    : 'text-amber-900 hover:text-amber-950 hover:bg-amber-100/60'
+                }`}
+              >
+                <ShieldAlert className="w-3.5 h-3.5 text-amber-500" />
+                <span>Admin Console</span>
+              </button>
+            )}
           </nav>
         )}
       </div>

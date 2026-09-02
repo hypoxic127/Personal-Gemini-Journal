@@ -12,6 +12,7 @@ import sessionsRouter from './routes/sessions.js';
 import entriesRouter from './routes/entries.js';
 import insightsRouter from './routes/insights.js';
 import placesRouter from './routes/places.js';
+import adminRouter from './routes/admin.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -87,6 +88,7 @@ apiRouter.use('/sessions', sessionsRouter);
 apiRouter.use('/entries', entriesRouter);
 apiRouter.use('/insights', insightsRouter);
 apiRouter.use('/places', placesRouter);
+apiRouter.use('/admin', adminRouter);
 
 app.use('/api', apiRouter);
 

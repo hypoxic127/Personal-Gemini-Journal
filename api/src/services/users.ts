@@ -84,3 +84,73 @@ export const getUserDoc = async (uid: string): Promise<UserProfile | null> => {
     entryCount: (data.entryCount as number) || 0,
   };
 };
+
+export interface ListUsersOptions {
+  limit?: number;
+  cursor?: string;
+}
+
+export const listUsers = async (
+  opts: ListUsersOptions = {}
+): Promise<{ items: UserProfile[]; nextCursor: string | null }> => {
+  const limit = Math.min(Math.max(1, opts.limit || 20), 50);
+  let query = db.collection('users').orderBy('createdAt', 'desc').limit(limit + 1);
+
+  if (opts.cursor) {
+    const cursorDoc = await db.doc(`users/${opts.cursor}`).get();
+    if (cursorDoc.exists) {
+      query = (query as any).startAfter(cursorDoc);
+    }
+  }
+
+  const snap = await query.get();
+  const docs = snap.docs;
+  const hasMore = docs.length > limit;
+  const pageDocs = hasMore ? docs.slice(0, limit) : docs;
+
+  const items: UserProfile[] = pageDocs.map((doc) => {
+    const data = doc.data() || {};
+    let createdAt = new Date().toISOString();
+    if (data.createdAt?.toDate) {
+      createdAt = data.createdAt.toDate().toISOString();
+    } else if (typeof data.createdAt === 'string') {
+      createdAt = data.createdAt;
+    }
+
+    let lastActiveAt = new Date().toISOString();
+    if (data.lastActiveAt?.toDate) {
+      lastActiveAt = data.lastActiveAt.toDate().toISOString();
+    } else if (typeof data.lastActiveAt === 'string') {
+      lastActiveAt = data.lastActiveAt;
+    }
+
+    return {
+      uid: doc.id,
+      email: typeof data.email === 'string' ? data.email : null,
+      displayName: typeof data.displayName === 'string' ? data.displayName : null,
+      photoURL: typeof data.photoURL === 'string' ? data.photoURL : null,
+      role: data.role === 'admin' ? 'admin' : 'user',
+      createdAt,
+      lastActiveAt,
+      entryCount: typeof data.entryCount === 'number' ? data.entryCount : 0,
+    };
+  });
+
+  const nextCursor = hasMore && pageDocs.length > 0 ? pageDocs[pageDocs.length - 1].id : null;
+
+  return {
+    items,
+    nextCursor,
+  };
+};
+
+export const updateUserRole = async (uid: string, role: 'user' | 'admin'): Promise<void> => {
+  const userRef = db.doc(`users/${uid}`);
+  await userRef.set(
+    {
+      role,
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+};

@@ -166,6 +166,57 @@ export interface DailyAggregateDoc {
 }
 
 // --------------------------------------------------------------------------------------
+// M5: Admin RBAC & Privacy-Preserving Population Insights Schemas
+// --------------------------------------------------------------------------------------
+
+export const DailyTrendItemSchema = z.object({
+  date: z.string(),
+  entries: z.number().int().nonnegative(),
+  activeUsers: z.number().int().nonnegative(),
+}).strict();
+export type DailyTrendItem = z.infer<typeof DailyTrendItemSchema>;
+
+export const AdminStatsResponseSchema = z.object({
+  totalEntries: z.number().int().nonnegative(),
+  activeUsers: z.number().int().nonnegative(),
+  suppressed: z.boolean(),
+  moodDistribution: z.record(MoodEnum, z.number().int().nonnegative()).nullable(),
+  averageMoodScore: z.number().nullable(),
+  dailyTrend: z.array(DailyTrendItemSchema),
+}).strict();
+export type AdminStatsResponse = z.infer<typeof AdminStatsResponseSchema>;
+
+export const AdminUserItemSchema = z.object({
+  uid: z.string(),
+  email: z.string().nullable(),
+  displayName: z.string().nullable(),
+  photoURL: z.string().nullable(),
+  role: UserRoleSchema,
+  createdAt: z.string(),
+  lastActiveAt: z.string(),
+  entryCount: z.number().int().nonnegative(),
+}).strict();
+export type AdminUserItem = z.infer<typeof AdminUserItemSchema>;
+
+export const AdminUsersQuerySchema = z.object({
+  limit: z.coerce.number().int().positive().catch(DEFAULT_PAGE_SIZE)
+    .transform((v) => Math.min(v, MAX_PAGE_SIZE))
+    .default(DEFAULT_PAGE_SIZE),
+  cursor: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).optional(),
+}).strict();
+export type AdminUsersQueryInput = z.infer<typeof AdminUsersQuerySchema>;
+export const AdminUsersListQuerySchema = AdminUsersQuerySchema;
+export type AdminUsersListQueryInput = AdminUsersQueryInput;
+
+export const AdminUsersResponseSchema = z.object({
+  items: z.array(AdminUserItemSchema),
+  nextCursor: z.string().nullable(),
+}).strict();
+export type AdminUsersResponse = z.infer<typeof AdminUsersResponseSchema>;
+export const AdminUsersListResponseSchema = AdminUsersResponseSchema;
+export type AdminUsersListResponse = AdminUsersResponse;
+
+// --------------------------------------------------------------------------------------
 // M3: Mood Insights & Dashboard Schemas
 // --------------------------------------------------------------------------------------
 

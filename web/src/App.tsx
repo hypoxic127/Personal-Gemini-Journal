@@ -9,6 +9,7 @@ import { ReflectionWorkspace } from './components/ReflectionWorkspace';
 import { EntryHistorySidebar } from './components/EntryHistorySidebar';
 import { MoodDashboard } from './components/MoodDashboard';
 import { MoodMap } from './components/MoodMap';
+import { Admin } from './pages/Admin';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { describeError, journalApi } from './lib/journalApi';
 
@@ -57,7 +58,14 @@ const DeleteConfirmation: React.FC<{
 const Journal: React.FC<{ onOpenThreatModal: () => void }> = ({ onOpenThreatModal }) => {
   const { user, profile, role, signOut, refreshProfile } = useAuth();
 
-  const [activeView, setActiveView] = useState<'workspace' | 'insights' | 'map'>('workspace');
+  const [activeView, setActiveView] = useState<'workspace' | 'insights' | 'map' | 'admin'>('workspace');
+
+  // Client route guard: non-admin users cannot navigate to or remain on admin view
+  useEffect(() => {
+    if (activeView === 'admin' && role !== 'admin') {
+      setActiveView('workspace');
+    }
+  }, [activeView, role]);
   const [sessions, setSessions] = useState<SessionDoc[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [isLoadingSessions, setIsLoadingSessions] = useState(true);
@@ -261,6 +269,15 @@ const Journal: React.FC<{ onOpenThreatModal: () => void }> = ({ onOpenThreatModa
                 setActiveView('workspace');
                 void openSession(target);
               }
+            }}
+          />
+        </ErrorBoundary>
+      ) : activeView === 'admin' ? (
+        <ErrorBoundary>
+          <Admin
+            onStartReflection={() => {
+              setActiveView('workspace');
+              void startNew();
             }}
           />
         </ErrorBoundary>

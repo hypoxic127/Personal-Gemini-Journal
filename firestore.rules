@@ -68,7 +68,7 @@ service cloud.firestore {
     // Admins can read this. Admins cannot read anything under users/{uid}/** above —
     // a negative test in the suite proves an admin-claim token is denied there.
 
-    match /aggregates/{docId} {
+    match /aggregates/{document=**} {
       allow read:  if isAdmin();
       allow write: if false;
     }
@@ -77,7 +77,7 @@ service cloud.firestore {
     // Backend-only, via the Admin SDK. No client access at all, admins included:
     // an audit log an administrator can modify is not an audit log.
 
-    match /audit_logs/{logId} {
+    match /audit_logs/{document=**} {
       allow read, write: if false;
     }
 

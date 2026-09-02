@@ -13,3 +13,5 @@ test
 coverage
 .vscode
 .idea
+scripts
+scripts/
