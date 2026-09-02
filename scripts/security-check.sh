@@ -77,8 +77,13 @@ fi
 
 # 2c — rules tests, including cross-user negative cases, must pass
 if [ -f test/firestore.rules.test.ts ]; then
-  if command -v firebase >/dev/null 2>&1; then
-    if firebase emulators:exec --only firestore "pnpm test:rules" >/tmp/rules.log 2>&1; then
+  if command -v firebase >/dev/null 2>&1 || command -v firebase.cmd >/dev/null 2>&1; then
+    RUN_CMD='firebase emulators:exec --only firestore "pnpm test:rules"'
+    if [[ "${OSTYPE:-}" == "msys" || "${OSTYPE:-}" == "cygwin" || -n "${WINDIR:-}" ]]; then
+      # On Windows (Git Bash/MSYS), PowerShell bridge preserves argument boundaries for firebase.cmd
+      RUN_CMD='powershell.exe -NoProfile -EncodedCommand ZgBpAHIAZQBiAGEAcwBlAC4AYwBtAGQAIABlAG0AdQBsAGEAdABvAHIAcwA6AGUAeABlAGMAIAAtAC0AbwBuAGwAeQAgAGYAaQByAGUAcwB0AG8AcgBlACAAIgBwAG4AcABtACAAdABlAHMAdAA6AHIAdQBsAGUAcwAiAA=='
+    fi
+    if eval "$RUN_CMD" >/tmp/rules.log 2>&1; then
       pass "rules tests pass (including cross-user negative cases)"
     else
       fail "rules tests failed — see /tmp/rules.log"
