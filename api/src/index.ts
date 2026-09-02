@@ -6,11 +6,14 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { env } from './config.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import authRouter from './routes/auth.js';
+import configRouter from './routes/config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+
 
 // 1. Security Headers with Strict CSP
 app.use(
@@ -75,8 +78,11 @@ apiRouter.get('/ping', (_req: Request, res: Response) => {
   res.json({ data: { message: 'pong' } });
 });
 
+apiRouter.use('/auth', authRouter);
+apiRouter.use('/config', configRouter);
 
 app.use('/api', apiRouter);
+
 
 // 6. Static Frontend Hosting & SPA Fallback
 const webDistPath = path.resolve(__dirname, '../../web/dist');
