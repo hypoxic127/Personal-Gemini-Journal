@@ -8,6 +8,8 @@ import { env } from './config.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import authRouter from './routes/auth.js';
 import configRouter from './routes/config.js';
+import sessionsRouter from './routes/sessions.js';
+import entriesRouter from './routes/entries.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -78,6 +80,8 @@ apiRouter.get('/healthz', (_req: Request, res: Response) => {
 
 apiRouter.use('/auth', authRouter);
 apiRouter.use('/config', configRouter);
+apiRouter.use('/sessions', sessionsRouter);
+apiRouter.use('/entries', entriesRouter);
 
 app.use('/api', apiRouter);
 

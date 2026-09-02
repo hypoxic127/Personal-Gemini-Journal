@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@google/genai": "2.20.0",
     "@journal/shared": "workspace:*",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",

@@ -143,6 +143,54 @@ Rules: [`firestore.rules`](firestore.rules).
 
 ---
 
+## API surface
+
+Every route below requires a verified Firebase ID token and reads or writes only
+`users/{uid}/…` for the uid inside that token. A document id in a path is a document id, not
+an identity: another user's session id simply does not exist under your subtree, so it 404s.
+
+| Route | Limit | Notes |
+|---|---|---|
+| `POST /api/sessions` | AI | Starts a reflection; an optional `initialMessage` runs the first turn |
+| `GET /api/sessions` | standard | Cursor-paginated, server-capped page size |
+| `GET /api/sessions/:id` · `DELETE /api/sessions/:id` | standard | Delete removes the messages and the entry it produced |
+| `GET /api/sessions/:id/messages` | standard | Cursor-paginated, oldest first |
+| `POST /api/sessions/:id/messages` | AI | One turn: user message persisted **first**, then the model call |
+| `POST /api/sessions/:id/finalize` | AI | Conversation → structured entry, via `responseSchema` + Zod |
+| `GET /api/entries` · `GET /api/entries/:id` | standard | Saved entries, cursor-paginated |
+
+**AI** routes carry the stricter per-uid bucket (10 burst, one refill per 5s). Input is
+truncated to 4000 characters **server-side**, history is capped at 20 turns, and output
+tokens are capped per call. An unbounded model route is a denial-of-wallet vulnerability, so
+cost is treated as an availability control rather than a billing detail.
+
+**The model ladder lives in exactly one file** — [`api/src/services/gemini.ts`](api/src/services/gemini.ts).
+`generateContentWithFallback` walks `gemini-3.6-flash → gemini-3.1-flash-lite →
+gemini-flash-latest → gemini-3.7-flash`, falling through only on 503 / 429 / 404 / 500 plus a
+per-attempt 30s timeout, with jittered backoff between rungs. A `400` throws immediately:
+every rung would reject the same malformed request, so retrying costs four calls of quota to
+reach the identical error. The security gate greps the repo for a model name outside that
+file.
+
+**Model output is untrusted input.** `responseSchema` is best-effort, so every finalize
+response is re-validated with Zod before it can reach Firestore. Range and length slips
+(`moodScore: 99`, forty tags) are clamped; shape errors — a wrong type, an unknown enum, an
+extra field the model invented — are rejected outright and logged with field paths only.
+
+**Prompt injection.** User text is fenced in `<transcript>` tags, declared as data in the
+system instruction, and never concatenated into it; a closing tag inside the text is
+neutralised. That layer reduces noise. The layer that actually holds is capability: the model
+is called with one user's transcript, its output goes through Zod into that same user's
+document, and it never decides a path, a uid, or a call. A fully successful injection still
+reaches nothing.
+
+**A save that fails says so.** The user's own words are committed before the model is called,
+so an AI outage cannot cost someone what they wrote. A failed write returns `503 SAVE_FAILED`
+and the composer keeps the text with a Retry action — it is cleared only after a confirmed
+write.
+
+---
+
 ## Running locally
 
 ```bash

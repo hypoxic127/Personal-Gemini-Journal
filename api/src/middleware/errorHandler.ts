@@ -53,9 +53,10 @@ export const errorHandler: ErrorRequestHandler = (
     : 'An unexpected error occurred. Please try again later.';
 
   // Only an error we raised deliberately (AppError) may speak to the client in its own
-  // words. An unexpected throw could carry a stack fragment, a path, or a key, so it is
-  // always flattened to the generic message — the correlation id is the way back to it.
-  const userFacingMessage = operational && statusCode < 500 ? err.message : genericMessage;
+  // words — at any status, including 5xx: "your message could not be saved, please retry" is
+  // the whole point of a SAVE_FAILED. An unexpected throw could carry a stack fragment, a
+  // path, or a key, so it is always flattened — the correlation id is the way back to it.
+  const userFacingMessage = operational ? err.message : genericMessage;
 
   res.status(statusCode).json({
     error: {

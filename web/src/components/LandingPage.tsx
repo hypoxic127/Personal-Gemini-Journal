@@ -27,7 +27,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               Gemini Reflection Journal
             </span>
             <span className="block text-[11px] text-[#7D756D] font-medium">
-              Powered by Gemini 3.6 Flash & Cloud Firestore
+              Powered by Gemini & Cloud Firestore
             </span>
           </div>
         </div>
@@ -108,7 +108,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </div>
             <h3 className="text-base font-bold text-[#4A443F] mb-2">Multi-Turn AI Reflections</h3>
             <p className="text-xs text-[#7D756D] leading-relaxed">
-              Explore your thoughts with Gemini 3.6 Flash. Brainstorm options, gain new angles, and receive deep structured summaries.
+              Explore your thoughts with Gemini. Brainstorm options, gain new angles, and receive deep structured summaries.
             </p>
           </div>
 

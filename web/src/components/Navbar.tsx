@@ -29,7 +29,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="flex items-center space-x-2">
             <h1 className="text-base font-bold text-[#4A443F] font-serif tracking-tight leading-tight">Gemini Journal</h1>
             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#EAE5DD] text-[#5A5A40] border border-[#DCD3C6]">
-              Gemini 3.6 Flash
+              Powered by Gemini
             </span>
             {role === 'admin' && (
               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">

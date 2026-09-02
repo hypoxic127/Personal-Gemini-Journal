@@ -5,5 +5,9 @@ packages:
 
 allowBuilds:
   '@firebase/util': true
+  # Explicitly DENIED rather than approved. The only install-time script the SDK ships is
+  # `preinstall: echo 'preinstall: no-op'` — nothing in it is needed to import the library,
+  # and a dependency that never runs a script cannot run a malicious one.
+  '@google/genai': false
   esbuild: true
   protobufjs: true

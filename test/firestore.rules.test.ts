@@ -138,6 +138,37 @@ describe('Firestore Security Rules Matrix (Root Hardened Rules)', () => {
     await assertFails(userBDb.collection('users/userA/sessions/s1/messages').get());
   });
 
+  // M2 begins writing to sessions/messages. These paths were already denied to clients by
+  // the existing rules; these cases pin that down before any code starts using them.
+  it('NEG-SES-03: User A client-writing own session is DENIED (backend Admin SDK writes only)', async () => {
+    const userADb = testEnv.authenticatedContext('userA').firestore();
+    await assertFails(
+      userADb.doc('users/userA/sessions/s1').set({ title: 'Forged', status: 'active' })
+    );
+  });
+
+  it('NEG-SES-04: User A client-writing own message is DENIED', async () => {
+    const userADb = testEnv.authenticatedContext('userA').firestore();
+    await assertFails(
+      userADb.doc('users/userA/sessions/s1/messages/m1').set({ role: 'model', text: 'Forged reply' })
+    );
+  });
+
+  it('NEG-SES-05: User B writing into User A session and messages is DENIED', async () => {
+    const userBDb = testEnv.authenticatedContext('userB').firestore();
+    await assertFails(userBDb.doc('users/userA/sessions/s1').set({ title: 'Injected' }));
+    await assertFails(
+      userBDb.doc('users/userA/sessions/s1/messages/m1').set({ role: 'user', text: 'Injected' })
+    );
+  });
+
+  it('NEG-ENT-05: User B writing User A entry is DENIED', async () => {
+    const userBDb = testEnv.authenticatedContext('userB').firestore();
+    await assertFails(
+      userBDb.doc('users/userA/entries/e1').set({ title: 'Injected', moodScore: 5 })
+    );
+  });
+
   it('NEG-USR-01: Any signed-in user LISTING the users collection is DENIED (no uid enumeration)', async () => {
     await testEnv.withSecurityRulesDisabled(async (context) => {
       await context.firestore().doc('users/userA').set({ displayName: 'Alice' });

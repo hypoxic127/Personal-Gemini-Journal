@@ -151,6 +151,23 @@ else
   pass "public config route cannot reach a Maps key"
 fi
 
+# 4d — model names belong in exactly one file. A model id that leaks into a route, a
+# component, or marketing copy is one that gets missed when the fallback ladder changes.
+STRAY_MODELS=$(grep -rlniE "gemini[- ][0-9]" --include="*.ts" --include="*.tsx" --include="*.json"   api/src web/src shared/src 2>/dev/null | grep -v "^api/src/services/gemini.ts$")
+if [ -n "$STRAY_MODELS" ]; then
+  fail "model names appear outside api/src/services/gemini.ts:"
+  echo "$STRAY_MODELS" | sed 's/^/        /'
+else
+  pass "model names confined to api/src/services/gemini.ts"
+fi
+
+# 4e — the browser must never call a model provider directly.
+if grep -rn "@google/genai\|generativelanguage.googleapis.com" --include="*.ts" --include="*.tsx" web/src 2>/dev/null; then
+  fail "the web bundle references the model SDK or endpoint directly"
+else
+  pass "no direct model calls from the browser"
+fi
+
 section "5 · Dangerous patterns"
 
 if grep -rn "dangerouslySetInnerHTML" --include="*.tsx" web/src 2>/dev/null; then

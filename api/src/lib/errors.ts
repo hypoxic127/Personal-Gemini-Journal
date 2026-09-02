@@ -46,6 +46,9 @@ export const forbidden = (message = 'Access denied.') => new AppError(403, 'FORB
 export const notFound = (message = 'Resource not found.') =>
   new AppError(404, 'NOT_FOUND', message);
 
+export const conflict = (message = 'That action conflicts with the current state.') =>
+  new AppError(409, 'CONFLICT', message);
+
 export const serviceUnavailable = (message = 'Service temporarily unavailable.') =>
   new AppError(503, 'SERVICE_UNAVAILABLE', message);
 
