@@ -55,7 +55,7 @@ Hovering any point reveals its `moodReason`. An AI mood score that cannot explai
 
 Entries can carry a location, and map markers are **colored by mood**. "Everything I write at the office is blue" becomes something you can actually see.
 
-Three privacy controls, all required: **opt-in by default** (geolocation is never requested on page load), **precision degradation** (a city-level setting truncating coordinates to 2 decimals, ~1 km), and **revocability** (a bulk clear that writes an audit entry).
+Three privacy controls, all required: **opt-in by default** (geolocation is never requested on page load), **precision degradation** (all coordinates are systematically truncated to 2 decimal places, ~1.1 km city-level precision), and **revocability** (a bulk clear that writes an audit entry).
 
 Reverse geocoding runs server-side, and **any `placeName` or `geohash` supplied by the client is discarded and recomputed**. Trusting them would let a user claim any location and forge every location-based aggregate.
 

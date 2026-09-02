@@ -203,10 +203,11 @@ describe('Empirical Adversarial Challenge Suite: Milestone 4 (Geospatial & Maps)
     app.use('/api/places', placesRouter);
     app.use(errorHandler);
 
-    const listening = app.listen(0);
-    await new Promise<void>((resolve) => listening.once('listening', () => resolve()));
-    server = listening;
-    const addr = listening.address() as { port: number };
+    await new Promise<void>((resolve, reject) => {
+      server = app.listen(0, '127.0.0.1', () => resolve());
+      server.on('error', reject);
+    });
+    const addr = server.address() as { port: number };
     baseUrl = `http://127.0.0.1:${addr.port}`;
   });
 
@@ -391,8 +392,8 @@ describe('Empirical Adversarial Challenge Suite: Milestone 4 (Geospatial & Maps)
       expect(resolved.source).toBe('gps');
     });
 
-    it('ADV-POIS-03: FinalizeSessionSchema strictly parses only lat and lng, stripping/ignoring forged placeName', () => {
-      const parsed = FinalizeSessionSchema.safeParse({
+    it('ADV-POIS-03: FinalizeSessionSchema strictly rejects forged placeName/geohash via .strict() validation', () => {
+      const parsedForged = FinalizeSessionSchema.safeParse({
         location: {
           lat: 37.77,
           lng: -122.42,
@@ -401,13 +402,46 @@ describe('Empirical Adversarial Challenge Suite: Milestone 4 (Geospatial & Maps)
         },
       });
 
-      // Zod strips non-declared fields so parsed output contains only lat and lng
-      expect(parsed.success).toBe(true);
-      if (parsed.success) {
-        expect(parsed.data.location).toEqual({ lat: 37.77, lng: -122.42 });
-        expect((parsed.data.location as any).placeName).toBeUndefined();
-        expect((parsed.data.location as any).geohash).toBeUndefined();
+      // Strict Zod schema rejects undeclared server fields with validation failure
+      expect(parsedForged.success).toBe(false);
+
+      const parsedValid = FinalizeSessionSchema.safeParse({
+        location: {
+          lat: 37.77,
+          lng: -122.42,
+        },
+      });
+      expect(parsedValid.success).toBe(true);
+      if (parsedValid.success) {
+        expect(parsedValid.data.location).toEqual({ lat: 37.77, lng: -122.42, source: 'gps' });
       }
+    });
+
+    it('ADV-POIS-04: FinalizeSessionSchema accepts null location safely without rejecting with 400', () => {
+      const parsedNull = FinalizeSessionSchema.safeParse({ location: null });
+      expect(parsedNull.success).toBe(true);
+      if (parsedNull.success) {
+        expect(parsedNull.data.location).toBeNull();
+      }
+
+      const parsedEmpty = FinalizeSessionSchema.safeParse({});
+      expect(parsedEmpty.success).toBe(true);
+      if (parsedEmpty.success) {
+        expect(parsedEmpty.data.location).toBeUndefined();
+      }
+    });
+
+    it('ADV-GEO-04: resolveLocation enforces server-side precision degradation by default (~1.1 km)', async () => {
+      // High-precision GPS coordinates passed without options must be degraded server-side
+      const resolved = await resolveLocation(37.7749294821, -122.4194162819);
+      expect(resolved.lat).toBe(37.77);
+      expect(resolved.lng).toBe(-122.42);
+      expect(resolved.geohash).toBe('9q8yy7');
+    });
+
+    it('ADV-GEO-05: reverseGeocode normalizes -0.00 sub-decimal zeroes in fallback place label', async () => {
+      const result = await reverseGeocode(-0.001, -0.002);
+      expect(result.placeName).toBe('0.00°, 0.00°');
     });
   });
 

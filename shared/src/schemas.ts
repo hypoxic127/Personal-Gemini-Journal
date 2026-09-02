@@ -11,14 +11,22 @@ export const MoodEnum = z.enum([
 ]);
 export type Mood = z.infer<typeof MoodEnum>;
 
-export const LocationSchema = z.object({
+export const LocationInputSchema = z.object({
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+  source: z.enum(['gps', 'manual']).default('gps'),
+}).strict();
+export type LocationInput = z.infer<typeof LocationInputSchema>;
+
+export const LocationDataSchema = z.object({
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
   geohash: z.string().optional(),
   placeName: z.string().max(200).optional(),
   source: z.enum(['gps', 'manual']).default('gps'),
 });
-export type LocationData = z.infer<typeof LocationSchema>;
+export type LocationData = z.infer<typeof LocationDataSchema>;
+export const LocationSchema = LocationDataSchema;
 
 // Hard limits. These are the server's numbers: the form may mirror them for a better
 // experience, but nothing here is enforced by the client.
@@ -67,10 +75,7 @@ export interface Page<T> {
 }
 
 export const FinalizeSessionSchema = z.object({
-  location: z.object({
-    lat: z.number().min(-90).max(90),
-    lng: z.number().min(-180).max(180),
-  }).optional(),
+  location: LocationInputSchema.nullable().optional(),
 }).strict();
 export type FinalizeSessionInput = z.infer<typeof FinalizeSessionSchema>;
 

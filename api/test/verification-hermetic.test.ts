@@ -84,7 +84,7 @@ const { MoodEnum, GeminiFinalizeOutputSchema } = await import('@journal/shared')
 const { default: sessionsRouter } = await import('../src/routes/sessions.js');
 const { errorHandler } = await import('../src/middleware/errorHandler.js');
 
-describe('Walkthrough Verification Suite', () => {
+describe('Hermetic E2E Life-Cycle Suite (Mocked Firestore & Auth for Fast CI Gate)', () => {
 
   describe('TC-FIN-01: Session Finalization & Entry Generation with Mood Metadata', () => {
     it('verifies structured entry schema normalization containing title, summary, mood, moodScore, moodReason, and tags', async () => {
@@ -157,11 +157,12 @@ describe('Walkthrough Verification Suite', () => {
       app.use('/api/sessions', sessionsRouter);
       app.use(errorHandler);
 
-      const listening = app.listen(0);
-      await new Promise<void>((resolve) => listening.once('listening', () => resolve()));
-      server = listening;
-      const addr = listening.address() as { port: number };
-      baseUrl = 'http://127.0.0.1:' + addr.port;
+      await new Promise<void>((resolve, reject) => {
+        server = app.listen(0, '127.0.0.1', () => resolve());
+        server.on('error', reject);
+      });
+      const addr = server.address() as { port: number };
+      baseUrl = `http://127.0.0.1:${addr.port}`;
     });
 
     afterAll(async () => {
