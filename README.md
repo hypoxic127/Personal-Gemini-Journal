@@ -334,7 +334,7 @@ gcloud run services describe "$SERVICE" --region="$REGION" \
   --format="value(metadata.labels)"                                 # dev-tutorial=...
 ```
 
-<!-- Paste terminal screenshots of the above after deploying -->
+![Cloud Run Production Verification Evidence](docs/evidence/terminal-verification.png)
 
 ---
 
