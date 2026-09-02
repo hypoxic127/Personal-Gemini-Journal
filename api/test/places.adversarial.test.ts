@@ -204,11 +204,18 @@ describe('Empirical Adversarial Challenge Suite: Milestone 4 (Geospatial & Maps)
     app.use(errorHandler);
 
     await new Promise<void>((resolve, reject) => {
-      server = app.listen(0, '127.0.0.1', () => resolve());
-      server.on('error', reject);
+      const s = app.listen(0, '127.0.0.1', () => {
+        server = s;
+        const addr = s.address();
+        if (typeof addr === 'object' && addr && addr.port) {
+          baseUrl = `http://127.0.0.1:${addr.port}`;
+          resolve();
+        } else {
+          reject(new Error('Failed to obtain server address'));
+        }
+      });
+      s.on('error', reject);
     });
-    const addr = server.address() as { port: number };
-    baseUrl = `http://127.0.0.1:${addr.port}`;
   });
 
   afterAll(async () => {

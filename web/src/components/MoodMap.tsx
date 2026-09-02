@@ -137,6 +137,13 @@ export const MoodMap: React.FC<MoodMapProps> = ({ onStartReflection, onOpenSessi
     return locationEntries.filter((e) => e.mood === selectedMood);
   }, [locationEntries, selectedMood]);
 
+  // If active filter no longer includes selected entry, clear selection
+  useEffect(() => {
+    if (selectedMood !== 'all' && selectedEntry && selectedEntry.mood !== selectedMood) {
+      setSelectedEntry(null);
+    }
+  }, [selectedMood, selectedEntry]);
+
   // Compute map center (default to first entry with location or standard default)
   const mapCenter = useMemo(() => {
     if (filteredEntries.length > 0) {
@@ -326,7 +333,7 @@ export const MoodMap: React.FC<MoodMapProps> = ({ onStartReflection, onOpenSessi
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {filteredEntries.map((entry) => {
-                    const theme = MOOD_THEME[entry.mood];
+                    const theme = MOOD_THEME[entry.mood] ?? MOOD_THEME.neutral;
                     return (
                       <div
                         key={entry.id}
@@ -405,7 +412,7 @@ export const MoodMap: React.FC<MoodMapProps> = ({ onStartReflection, onOpenSessi
             >
               {filteredEntries.map((entry) => {
                 if (!entry.location) return null;
-                const theme = MOOD_THEME[entry.mood];
+                const theme = MOOD_THEME[entry.mood] ?? MOOD_THEME.neutral;
                 const isSelected = selectedEntry?.id === entry.id;
 
                 return (
@@ -436,32 +443,34 @@ export const MoodMap: React.FC<MoodMapProps> = ({ onStartReflection, onOpenSessi
               })}
 
               {/* InfoWindow for Selected Marker */}
-              {selectedEntry && selectedEntry.location && (
-                <InfoWindow
-                  position={{
-                    lat: selectedEntry.location.lat,
-                    lng: selectedEntry.location.lng,
-                  }}
-                  onCloseClick={() => setSelectedEntry(null)}
-                  headerDisabled={false}
-                >
-                  <div className="p-2 max-w-xs space-y-2 text-[#4A443F]">
-                    <div className="flex items-center justify-between gap-2">
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          MOOD_THEME[selectedEntry.mood].bg
-                        } ${MOOD_THEME[selectedEntry.mood].text} border ${
-                          MOOD_THEME[selectedEntry.mood].border
-                        }`}
-                      >
-                        {MOOD_THEME[selectedEntry.mood].emoji} {MOOD_THEME[selectedEntry.mood].label.split(' / ')[0]} ·{' '}
-                        {selectedEntry.moodScore > 0 ? '+' : ''}
-                        {selectedEntry.moodScore}
-                      </span>
-                      <span className="text-[10px] text-[#8C827A]">
-                        {new Date(selectedEntry.createdAt).toLocaleDateString()}
-                      </span>
-                    </div>
+              {selectedEntry && selectedEntry.location && (() => {
+                const selectedTheme = MOOD_THEME[selectedEntry.mood] ?? MOOD_THEME.neutral;
+                return (
+                  <InfoWindow
+                    position={{
+                      lat: selectedEntry.location.lat,
+                      lng: selectedEntry.location.lng,
+                    }}
+                    onCloseClick={() => setSelectedEntry(null)}
+                    headerDisabled={false}
+                  >
+                    <div className="p-2 max-w-xs space-y-2 text-[#4A443F]">
+                      <div className="flex items-center justify-between gap-2">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            selectedTheme.bg
+                          } ${selectedTheme.text} border ${
+                            selectedTheme.border
+                          }`}
+                        >
+                          {selectedTheme.emoji} {selectedTheme.label.split(' / ')[0]} ·{' '}
+                          {selectedEntry.moodScore > 0 ? '+' : ''}
+                          {selectedEntry.moodScore}
+                        </span>
+                        <span className="text-[10px] text-[#8C827A]">
+                          {new Date(selectedEntry.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
 
                     <h4 className="text-xs font-bold font-serif leading-tight">{selectedEntry.title}</h4>
 
@@ -494,7 +503,8 @@ export const MoodMap: React.FC<MoodMapProps> = ({ onStartReflection, onOpenSessi
                     )}
                   </div>
                 </InfoWindow>
-              )}
+              );
+            })()}
             </Map>
           </APIProvider>
         )}

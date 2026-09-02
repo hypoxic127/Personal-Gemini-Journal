@@ -106,13 +106,103 @@ describe('Places Service (M4 Geospatial & Reverse Geocoding)', () => {
       expect(result.placeName).toBe('37.77°, -122.42°');
     });
 
+    it('POS-GEO-08: parses and returns formatted address from valid upstream Geocoding API response', async () => {
+      const { env } = await import('../src/config.js');
+      const prevKey = env.MAPS_SERVER_API_KEY;
+      (env as any).MAPS_SERVER_API_KEY = 'mock_server_api_key_valid';
+
+      global.fetch = vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          status: 'OK',
+          results: [{ formatted_address: 'Market St, San Francisco, CA 94103, USA' }],
+        }),
+      })) as any;
+
+      try {
+        const result = await reverseGeocode(37.7749, -122.4194);
+        expect(result.placeName).toBe('Market St, San Francisco, CA 94103, USA');
+        expect(result.geohash).toBe('9q8yyk');
+      } finally {
+        (env as any).MAPS_SERVER_API_KEY = prevKey;
+      }
+    });
+
+    it('POS-GEO-09: truncates oversized place name (>200 chars) from upstream to prevent storage bloat', async () => {
+      const { env } = await import('../src/config.js');
+      const prevKey = env.MAPS_SERVER_API_KEY;
+      (env as any).MAPS_SERVER_API_KEY = 'mock_server_api_key_valid';
+
+      const oversizedAddress = 'Super Long Place Address '.repeat(15);
+      global.fetch = vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          status: 'OK',
+          results: [{ formatted_address: oversizedAddress }],
+        }),
+      })) as any;
+
+      try {
+        const result = await reverseGeocode(37.7749, -122.4194);
+        expect(result.placeName.length).toBe(200);
+        expect(result.placeName).toBe(oversizedAddress.slice(0, 200));
+      } finally {
+        (env as any).MAPS_SERVER_API_KEY = prevKey;
+      }
+    });
+
+    it('POS-GEO-10: gracefully falls back to coordinate label on upstream non-OK HTTP status or error status', async () => {
+      const { env } = await import('../src/config.js');
+      const prevKey = env.MAPS_SERVER_API_KEY;
+      (env as any).MAPS_SERVER_API_KEY = 'mock_server_api_key_valid';
+
+      // 1. HTTP 500
+      global.fetch = vi.fn(async () => ({
+        ok: false,
+        status: 500,
+      })) as any;
+
+      try {
+        const res500 = await reverseGeocode(37.7749, -122.4194);
+        expect(res500.placeName).toBe('37.77°, -122.42°');
+
+        // 2. OVER_QUERY_LIMIT
+        global.fetch = vi.fn(async () => ({
+          ok: true,
+          json: async () => ({ status: 'OVER_QUERY_LIMIT', results: [] }),
+        })) as any;
+
+        const resLimit = await reverseGeocode(37.7749, -122.4194);
+        expect(resLimit.placeName).toBe('37.77°, -122.42°');
+
+        // 3. ZERO_RESULTS
+        global.fetch = vi.fn(async () => ({
+          ok: true,
+          json: async () => ({ status: 'ZERO_RESULTS', results: [] }),
+        })) as any;
+
+        const resZero = await reverseGeocode(37.7749, -122.4194);
+        expect(resZero.placeName).toBe('37.77°, -122.42°');
+
+        // 4. Network throw / fetch failure
+        global.fetch = vi.fn(async () => {
+          throw new Error('Network timeout connecting to maps.googleapis.com');
+        }) as any;
+
+        const resNetErr = await reverseGeocode(37.7749, -122.4194);
+        expect(resNetErr.placeName).toBe('37.77°, -122.42°');
+      } finally {
+        (env as any).MAPS_SERVER_API_KEY = prevKey;
+      }
+    });
+
     it('NEG-GEO-06: throws on invalid coordinates', async () => {
       await expect(reverseGeocode(100, 0)).rejects.toThrow('Invalid coordinate bounds');
     });
   });
 
   describe('resolveLocation', () => {
-    it('POS-GEO-08: resolves complete location with precision degradation and source', async () => {
+    it('POS-GEO-11: resolves complete location with precision degradation and source', async () => {
       const location = await resolveLocation(37.774929, -122.419416, {
         degrade: true,
         source: 'gps',
@@ -125,7 +215,7 @@ describe('Places Service (M4 Geospatial & Reverse Geocoding)', () => {
       expect(location.source).toBe('gps');
     });
 
-    it('POS-GEO-09: resolves location without precision degradation if degrade is false', async () => {
+    it('POS-GEO-12: resolves location without precision degradation if degrade is false', async () => {
       const location = await resolveLocation(37.7749, -122.4194, {
         degrade: false,
         source: 'manual',

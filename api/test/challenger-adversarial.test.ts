@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import express from 'express';
 import type { Server } from 'http';
 import {
@@ -87,6 +87,33 @@ const callApi = (path: string, init: RequestInit & { uid?: string } = {}) => {
   return fetch(`${base}${path}`, { ...init, headers });
 };
 
+beforeAll(async () => {
+  const app = express();
+  app.use(express.json({ limit: '256kb' }));
+  app.use('/api/sessions', sessionsRouter);
+  app.use(errorHandler);
+
+  await new Promise<void>((resolve, reject) => {
+    const s = app.listen(0, '127.0.0.1', () => {
+      server = s;
+      const addr = s.address();
+      if (typeof addr === 'object' && addr && addr.port) {
+        base = `http://127.0.0.1:${addr.port}`;
+        resolve();
+      } else {
+        reject(new Error('Failed to obtain server address'));
+      }
+    });
+    s.on('error', reject);
+  });
+});
+
+afterAll(async () => {
+  if (server) {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
 beforeEach(async () => {
   for (const fn of Object.values(sessions)) fn.mockReset();
   gemini.generateChatReply.mockReset();
@@ -137,21 +164,6 @@ beforeEach(async () => {
     createdAt: '2026-09-02T12:05:00.000Z',
     updatedAt: '2026-09-02T12:05:00.000Z',
   });
-
-  const app = express();
-  app.use(express.json({ limit: '256kb' }));
-  app.use('/api/sessions', sessionsRouter);
-  app.use(errorHandler);
-
-  const listening = app.listen(0);
-  await new Promise<void>((resolve) => listening.once('listening', () => resolve()));
-  server = listening;
-  const addr = listening.address();
-  base = `http://127.0.0.1:${typeof addr === 'object' && addr ? addr.port : 0}`;
-});
-
-afterEach(async () => {
-  await new Promise<void>((resolve) => server.close(() => resolve()));
 });
 
 // =====================================================================================

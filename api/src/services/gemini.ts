@@ -434,7 +434,7 @@ export async function generateEntryDraft(args: {
       JSON.stringify({
         timestamp: new Date().toISOString(),
         event: 'AI_FINALIZE_JSON_PARSE_FAILED',
-        rawText,
+        rawLength: rawText.length,
         error: err instanceof Error ? err.message : String(err),
       })
     );

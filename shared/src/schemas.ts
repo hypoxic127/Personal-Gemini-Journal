@@ -27,6 +27,8 @@ export const LocationDataSchema = z.object({
 });
 export type LocationData = z.infer<typeof LocationDataSchema>;
 export const LocationSchema = LocationDataSchema;
+export const StoredLocationSchema = LocationDataSchema;
+export type StoredLocation = LocationData;
 
 // Hard limits. These are the server's numbers: the form may mirror them for a better
 // experience, but nothing here is enforced by the client.

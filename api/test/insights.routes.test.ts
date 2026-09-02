@@ -39,11 +39,19 @@ describe('GET /api/insights/mood (M3 Mood Insights API)', () => {
     app.use('/api/insights', insightsRouter);
     app.use(errorHandler);
 
-    const listening = app.listen(0);
-    await new Promise<void>((resolve) => listening.once('listening', () => resolve()));
-    server = listening;
-    const addr = listening.address() as { port: number };
-    baseUrl = 'http://127.0.0.1:' + addr.port;
+    await new Promise<void>((resolve, reject) => {
+      const s = app.listen(0, '127.0.0.1', () => {
+        server = s;
+        const addr = s.address();
+        if (typeof addr === 'object' && addr && addr.port) {
+          baseUrl = `http://127.0.0.1:${addr.port}`;
+          resolve();
+        } else {
+          reject(new Error('Failed to obtain server address'));
+        }
+      });
+      s.on('error', reject);
+    });
   });
 
   afterAll(async () => {

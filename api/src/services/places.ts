@@ -121,7 +121,12 @@ export async function reverseGeocode(
   }
 
   const geohash = encodeGeohash(lat, lng, 6);
-  const fallbackPlace = `${lat.toFixed(2)}°, ${lng.toFixed(2)}°`;
+  const formatCoord = (n: number) => {
+    const val = Object.is(n, -0) ? 0 : n;
+    const fixed = val.toFixed(2);
+    return fixed === '-0.00' ? '0.00' : fixed;
+  };
+  const fallbackPlace = `${formatCoord(lat)}°, ${formatCoord(lng)}°`;
   const apiKey = env.MAPS_SERVER_API_KEY;
 
   if (!apiKey || apiKey === 'test-maps-server-key') {
@@ -190,13 +195,15 @@ export async function reverseGeocode(
 
 /**
  * Helper to resolve complete location object for entry persistence.
+ * Defaults to precision degradation (~1.1 km city-level resolution) for privacy preservation.
  */
 export async function resolveLocation(
   lat: number,
   lng: number,
   options: { degrade?: boolean; source?: 'gps' | 'manual'; correlationId?: string } = {}
 ): Promise<LocationData> {
-  const coords = options.degrade ? degradePrecision(lat, lng) : { lat, lng };
+  const shouldDegrade = options.degrade !== false;
+  const coords = shouldDegrade ? degradePrecision(lat, lng) : { lat, lng };
   const geocoded = await reverseGeocode(coords.lat, coords.lng, {
     correlationId: options.correlationId,
   });

@@ -121,8 +121,9 @@ export const ReflectionWorkspace: React.FC<ReflectionWorkspaceProps> = ({
         // Precision degradation (~1.1 km city-level resolution)
         const rawLat = position.coords.latitude;
         const rawLng = position.coords.longitude;
-        const lat = Number(rawLat.toFixed(2));
-        const lng = Number(rawLng.toFixed(2));
+        const sanitizeZero = (n: number) => (Object.is(n, -0) ? 0 : n);
+        const lat = sanitizeZero(Number(rawLat.toFixed(2)));
+        const lng = sanitizeZero(Number(rawLng.toFixed(2)));
         const coords = { lat, lng };
 
         setLocationCoords(coords);

@@ -32,12 +32,21 @@ const startWith = async (overrides: Partial<Record<(typeof ENV_KEYS)[number], st
   app.use('/api/config', configRouter);
   app.use(errorHandler);
 
-  const listening = app.listen(0);
-  await new Promise<void>((resolve) => listening.once('listening', () => resolve()));
-  server = listening;
-  const address = listening.address();
-  const port = typeof address === 'object' && address ? address.port : 0;
-  return `http://127.0.0.1:${port}`;
+  let baseUrl = '';
+  await new Promise<void>((resolve, reject) => {
+    const s = app.listen(0, '127.0.0.1', () => {
+      server = s;
+      const address = s.address();
+      if (typeof address === 'object' && address && address.port) {
+        baseUrl = `http://127.0.0.1:${address.port}`;
+        resolve();
+      } else {
+        reject(new Error('Failed to obtain server address'));
+      }
+    });
+    s.on('error', reject);
+  });
+  return baseUrl;
 };
 
 afterEach(async () => {
