@@ -157,3 +157,59 @@ export interface DailyAggregateDoc {
   suppressed?: boolean;
   updatedAt: string;
 }
+
+// --------------------------------------------------------------------------------------
+// M3: Mood Insights & Dashboard Schemas
+// --------------------------------------------------------------------------------------
+
+export const InsightRangeEnum = z.enum(['7d', '30d', '90d']);
+export type InsightRange = z.infer<typeof InsightRangeEnum>;
+
+export const InsightQuerySchema = z.object({
+  range: InsightRangeEnum.catch('30d').default('30d'),
+}).strict();
+export type InsightQueryInput = z.infer<typeof InsightQuerySchema>;
+
+export const MoodTimelinePointSchema = z.object({
+  date: z.string(),
+  averageScore: z.number(),
+  entryCount: z.number(),
+  dominantMood: MoodEnum,
+  reasons: z.array(z.string()),
+});
+export type MoodTimelinePoint = z.infer<typeof MoodTimelinePointSchema>;
+
+export const MoodDistributionItemSchema = z.object({
+  mood: MoodEnum,
+  count: z.number(),
+  percentage: z.number(),
+});
+export type MoodDistributionItem = z.infer<typeof MoodDistributionItemSchema>;
+
+export const TagFrequencySchema = z.object({
+  tag: z.string(),
+  count: z.number(),
+});
+export type TagFrequency = z.infer<typeof TagFrequencySchema>;
+
+export const MoodHighlightEntrySchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  mood: MoodEnum,
+  moodScore: z.number(),
+  moodReason: z.string(),
+  createdAt: z.string(),
+  tags: z.array(z.string()),
+});
+export type MoodHighlightEntry = z.infer<typeof MoodHighlightEntrySchema>;
+
+export const MoodInsightResponseSchema = z.object({
+  range: InsightRangeEnum,
+  totalEntries: z.number(),
+  averageMoodScore: z.number(),
+  timeline: z.array(MoodTimelinePointSchema),
+  distribution: z.array(MoodDistributionItemSchema),
+  topTags: z.array(TagFrequencySchema),
+  highlights: z.array(MoodHighlightEntrySchema),
+});
+export type MoodInsightResponse = z.infer<typeof MoodInsightResponseSchema>;

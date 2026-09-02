@@ -41,6 +41,9 @@ export const journalApi = {
 
   listEntries: (cursor?: string) =>
     api.get<Page<EntryDoc>>(`/api/entries${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`),
+
+  getMoodInsights: (range: '7d' | '30d' | '90d' = '30d') =>
+    api.get<import('@journal/shared').MoodInsightResponse>(`/api/insights/mood?range=${range}`),
 };
 
 /**

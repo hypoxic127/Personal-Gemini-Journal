@@ -7,6 +7,7 @@ import { LandingPage } from './components/LandingPage';
 import { ThreatSummaryTable } from './components/ThreatSummaryTable';
 import { ReflectionWorkspace } from './components/ReflectionWorkspace';
 import { EntryHistorySidebar } from './components/EntryHistorySidebar';
+import { MoodDashboard } from './components/MoodDashboard';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { describeError, journalApi } from './lib/journalApi';
 
@@ -55,6 +56,7 @@ const DeleteConfirmation: React.FC<{
 const Journal: React.FC<{ onOpenThreatModal: () => void }> = ({ onOpenThreatModal }) => {
   const { user, profile, role, signOut, refreshProfile } = useAuth();
 
+  const [activeView, setActiveView] = useState<'workspace' | 'insights'>('workspace');
   const [sessions, setSessions] = useState<SessionDoc[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [isLoadingSessions, setIsLoadingSessions] = useState(true);
@@ -223,46 +225,60 @@ const Journal: React.FC<{ onOpenThreatModal: () => void }> = ({ onOpenThreatModa
         user={user}
         role={role}
         entryCount={profile?.entryCount ?? 0}
+        activeView={activeView}
+        onViewChange={setActiveView}
         onSignOut={signOut}
-        onNewReflection={() => void startNew()}
+        onNewReflection={() => {
+          setActiveView('workspace');
+          void startNew();
+        }}
         onOpenThreatModal={onOpenThreatModal}
       />
 
-      <div className="flex-1 flex overflow-hidden">
-        <EntryHistorySidebar
-          sessions={sessions}
-          activeSessionId={activeSession?.id ?? null}
-          isLoading={isLoadingSessions}
-          error={sessionsError}
-          hasMore={Boolean(cursor)}
-          isLoadingMore={isLoadingMore}
-          onRetry={() => void loadSessions()}
-          onLoadMore={() => void loadMore()}
-          onSelect={(session) => void openSession(session)}
-          onNew={() => void startNew()}
-          onRequestDelete={(session) => {
-            setDeleteError(null);
-            setDeleteTarget(session);
+      {activeView === 'insights' ? (
+        <MoodDashboard
+          onStartReflection={() => {
+            setActiveView('workspace');
+            void startNew();
           }}
         />
+      ) : (
+        <div className="flex-1 flex overflow-hidden">
+          <EntryHistorySidebar
+            sessions={sessions}
+            activeSessionId={activeSession?.id ?? null}
+            isLoading={isLoadingSessions}
+            error={sessionsError}
+            hasMore={Boolean(cursor)}
+            isLoadingMore={isLoadingMore}
+            onRetry={() => void loadSessions()}
+            onLoadMore={() => void loadMore()}
+            onSelect={(session) => void openSession(session)}
+            onNew={() => void startNew()}
+            onRequestDelete={(session) => {
+              setDeleteError(null);
+              setDeleteTarget(session);
+            }}
+          />
 
-        <ReflectionWorkspace
-          session={activeSession}
-          messages={messages}
-          entry={entry}
-          isLoading={isLoadingMessages}
-          loadError={messagesError}
-          onReloadMessages={() => activeSession && void openSession(activeSession)}
-          onSend={send}
-          onFinalize={finalize}
-          onRequestDelete={(session) => {
-            setDeleteError(null);
-            setDeleteTarget(session);
-          }}
-          isSending={isSending}
-          isFinalizing={isFinalizing}
-        />
-      </div>
+          <ReflectionWorkspace
+            session={activeSession}
+            messages={messages}
+            entry={entry}
+            isLoading={isLoadingMessages}
+            loadError={messagesError}
+            onReloadMessages={() => activeSession && void openSession(activeSession)}
+            onSend={send}
+            onFinalize={finalize}
+            onRequestDelete={(session) => {
+              setDeleteError(null);
+              setDeleteTarget(session);
+            }}
+            isSending={isSending}
+            isFinalizing={isFinalizing}
+          />
+        </div>
+      )}
 
       {deleteTarget && (
         <DeleteConfirmation
