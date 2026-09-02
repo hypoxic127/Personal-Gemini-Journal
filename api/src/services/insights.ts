@@ -13,8 +13,40 @@ import { db } from '../firebase.js';
 
 const entriesCol = (uid: string) => db.collection(`users/${uid}/entries`);
 
-const toIso = (value: unknown): string =>
-  value instanceof Timestamp ? value.toDate().toISOString() : new Date().toISOString();
+const MAX_INSIGHT_QUERY_LIMIT = 500;
+
+export const toIso = (value: unknown): string => {
+  try {
+    if (value && typeof (value as any).toDate === 'function') {
+      try {
+        const d = (value as any).toDate();
+        if (d instanceof Date && !Number.isNaN(d.getTime())) return d.toISOString();
+      } catch {
+        // ignore
+      }
+    }
+    if (value && typeof value === 'object') {
+      if (typeof (value as any)._seconds === 'number' && Number.isFinite((value as any)._seconds)) {
+        const d = new Date((value as any)._seconds * 1000);
+        if (!Number.isNaN(d.getTime())) return d.toISOString();
+      }
+      if (typeof (value as any).seconds === 'number' && Number.isFinite((value as any).seconds)) {
+        const d = new Date((value as any).seconds * 1000);
+        if (!Number.isNaN(d.getTime())) return d.toISOString();
+      }
+    }
+    if (value instanceof Date) {
+      if (!Number.isNaN(value.getTime())) return value.toISOString();
+    }
+    if (typeof value === 'string') {
+      const parsed = Date.parse(value);
+      if (!Number.isNaN(parsed)) return new Date(parsed).toISOString();
+    }
+  } catch {
+    // fallback to current ISO string
+  }
+  return new Date().toISOString();
+};
 
 const RANGE_DAYS: Record<InsightRange, number> = {
   '7d': 7,
@@ -26,18 +58,19 @@ export async function getMoodInsights(
   uid: string,
   range: InsightRange = '30d'
 ): Promise<MoodInsightResponse> {
-  const days = RANGE_DAYS[range] || 30;
+  const normalizedRange: InsightRange = range in RANGE_DAYS ? range : '30d';
+  const days = RANGE_DAYS[normalizedRange] || 30;
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - days);
   cutoffDate.setHours(0, 0, 0, 0);
 
   const cutoffTimestamp = Timestamp.fromDate(cutoffDate);
 
-  // Bounded query under caller's isolated subtree
+  // Bounded query under caller's isolated subtree with safe 500 capacity for 90d window
   const snap = await entriesCol(uid)
     .where('createdAt', '>=', cutoffTimestamp)
     .orderBy('createdAt', 'desc')
-    .limit(100)
+    .limit(MAX_INSIGHT_QUERY_LIMIT)
     .get();
 
   const entries: Array<{
@@ -58,11 +91,16 @@ export async function getMoodInsights(
     const dateKey = createdAtIso.slice(0, 10); // YYYY-MM-DD
     const moodParsed = MoodEnum.safeParse(data.mood);
     const mood: Mood = moodParsed.success ? moodParsed.data : 'neutral';
-    const moodScore = typeof data.moodScore === 'number' && Number.isFinite(data.moodScore) ? data.moodScore : 0;
-    const moodReason = typeof data.moodReason === 'string' ? data.moodReason : '';
-    const title = typeof data.title === 'string' ? data.title : 'Reflection';
-    const summary = typeof data.summary === 'string' ? data.summary : '';
-    const tags = Array.isArray(data.tags) ? data.tags.filter((t): t is string => typeof t === 'string') : [];
+    const rawScore = typeof data.moodScore === 'number' && Number.isFinite(data.moodScore) ? data.moodScore : 0;
+    const moodScore = Math.max(-5, Math.min(5, Math.round(rawScore * 100) / 100));
+    const moodReason = typeof data.moodReason === 'string' ? data.moodReason.trim() : '';
+    const title = typeof data.title === 'string' && data.title.trim().length > 0 ? data.title.trim() : 'Reflection';
+    const summary = typeof data.summary === 'string' ? data.summary.trim() : '';
+    const tags = Array.isArray(data.tags)
+      ? data.tags
+          .filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
+          .map((t) => t.trim())
+      : [];
 
     entries.push({
       id: doc.id,
@@ -79,9 +117,10 @@ export async function getMoodInsights(
 
   const totalEntries = entries.length;
 
-  // 1. Average mood score
+  // 1. Average mood score (rounded to 2 decimal places)
   const totalScore = entries.reduce((acc, e) => acc + e.moodScore, 0);
-  const averageMoodScore = totalEntries > 0 ? Number((totalScore / totalEntries).toFixed(2)) : 0;
+  const rawAvg = totalEntries > 0 ? Number((totalScore / totalEntries).toFixed(2)) : 0;
+  const averageMoodScore = rawAvg === 0 ? 0 : rawAvg;
 
   // 2. Timeline aggregation (group by dateKey)
   const dailyMap = new Map<string, {
@@ -104,9 +143,12 @@ export async function getMoodInsights(
 
   const timeline: MoodTimelinePoint[] = Array.from(dailyMap.entries())
     .map(([date, data]) => {
-      const avg = Number((data.scores.reduce((a, b) => a + b, 0) / data.scores.length).toFixed(2));
+      const dayRawAvg = data.scores.length > 0
+        ? Number((data.scores.reduce((a, b) => a + b, 0) / data.scores.length).toFixed(2))
+        : 0;
+      const avg = dayRawAvg === 0 ? 0 : dayRawAvg;
       let dominantMood: Mood = 'neutral';
-      let maxCount = -1;
+      let maxCount = 0;
       for (const [m, count] of data.moodCounts.entries()) {
         if (count > maxCount) {
           maxCount = count;
@@ -148,19 +190,18 @@ export async function getMoodInsights(
     };
   });
 
-  // 4. Top Tags aggregation
+  // 4. Top Tags aggregation (deduplicated per entry to prevent artificial skew)
   const tagCounts = new Map<string, number>();
   for (const e of entries) {
-    for (const tag of e.tags) {
-      if (tag) {
-        tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
-      }
+    const uniqueTagsInEntry = new Set(e.tags);
+    for (const tag of uniqueTagsInEntry) {
+      tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
     }
   }
 
   const topTags: TagFrequency[] = Array.from(tagCounts.entries())
     .map(([tag, count]) => ({ tag, count }))
-    .sort((a, b) => b.count - a.count)
+    .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag))
     .slice(0, 10);
 
   // 5. Highlights for Explainability (most recent 5 entries)
@@ -175,7 +216,7 @@ export async function getMoodInsights(
   }));
 
   return {
-    range,
+    range: normalizedRange,
     totalEntries,
     averageMoodScore,
     timeline,

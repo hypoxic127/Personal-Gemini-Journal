@@ -177,4 +177,68 @@ describe('GET /api/insights/mood (M3 Mood Insights API)', () => {
     expect(res.status).toBe(200);
     expect(mockInsightsService.getMoodInsights).toHaveBeenCalledWith('user_alice', '30d');
   });
+
+  it('NEG-INSIGHT-03: malformed service output fails Zod schema validation with 500 error', async () => {
+    // Return service data missing required fields or having out-of-spec values
+    const brokenData = {
+      range: '30d',
+      totalEntries: 'invalid_type_string', // string instead of number
+    };
+
+    mockInsightsService.getMoodInsights.mockResolvedValueOnce(brokenData as any);
+
+    const res = await fetch(baseUrl + '/api/insights/mood?range=30d', {
+      headers: { Authorization: 'Bearer token_user_alice' },
+    });
+
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error).toBeDefined();
+  });
+
+  it('NEG-INSIGHT-04: client-supplied uid in query or header is ignored (tenant isolation)', async () => {
+    const sampleData = {
+      range: '30d' as const,
+      totalEntries: 0,
+      averageMoodScore: 0,
+      timeline: [],
+      distribution: [],
+      topTags: [],
+      highlights: [],
+    };
+
+    mockInsightsService.getMoodInsights.mockResolvedValueOnce(sampleData);
+
+    const res = await fetch(baseUrl + '/api/insights/mood?uid=victim_user&userId=attacker', {
+      headers: {
+        Authorization: 'Bearer token_user_alice',
+        'x-user-id': 'spoofed_user',
+      },
+    });
+
+    expect(res.status).toBe(200);
+    // Verifies the backend called the service with verified token UID ONLY ('user_alice')
+    expect(mockInsightsService.getMoodInsights).toHaveBeenCalledWith('user_alice', '30d');
+  });
+
+  it('POS-INSIGHT-03: supports 7d, 30d, and 90d query range options', async () => {
+    const emptyData = {
+      range: '90d' as const,
+      totalEntries: 0,
+      averageMoodScore: 0,
+      timeline: [],
+      distribution: [],
+      topTags: [],
+      highlights: [],
+    };
+
+    mockInsightsService.getMoodInsights.mockResolvedValueOnce(emptyData);
+
+    const res = await fetch(baseUrl + '/api/insights/mood?range=90d', {
+      headers: { Authorization: 'Bearer token_user_alice' },
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockInsightsService.getMoodInsights).toHaveBeenCalledWith('user_alice', '90d');
+  });
 });

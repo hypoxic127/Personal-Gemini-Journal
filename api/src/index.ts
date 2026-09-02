@@ -79,10 +79,6 @@ apiRouter.get('/healthz', (_req: Request, res: Response) => {
   res.status(200).json({ ok: true });
 });
 
-apiRouter.get('/ping', (_req: Request, res: Response) => {
-  res.json({ data: { message: 'pong' } });
-});
-
 apiRouter.use('/auth', authRouter);
 apiRouter.use('/config', configRouter);
 apiRouter.use('/sessions', sessionsRouter);

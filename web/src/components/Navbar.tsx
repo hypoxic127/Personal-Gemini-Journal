@@ -54,10 +54,10 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* View Mode Navigation Tabs */}
         {onViewChange && (
-          <nav className="hidden md:flex items-center space-x-1 bg-[#EFECE6] p-1 rounded-xl border border-[#DCD3C6]">
+          <nav className="flex items-center space-x-1 bg-[#EFECE6] p-0.5 sm:p-1 rounded-xl border border-[#DCD3C6]">
             <button
               onClick={() => onViewChange('workspace')}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              className={`px-2.5 sm:px-3 py-1 rounded-lg text-[11px] sm:text-xs font-semibold transition-all cursor-pointer ${
                 activeView === 'workspace'
                   ? 'bg-[#5A5A40] text-[#FAF8F5] shadow-2xs'
                   : 'text-[#7D756D] hover:text-[#4A443F]'
@@ -67,7 +67,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
             <button
               onClick={() => onViewChange('insights')}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              className={`px-2.5 sm:px-3 py-1 rounded-lg text-[11px] sm:text-xs font-semibold transition-all cursor-pointer ${
                 activeView === 'insights'
                   ? 'bg-[#5A5A40] text-[#FAF8F5] shadow-2xs'
                   : 'text-[#7D756D] hover:text-[#4A443F]'

@@ -236,12 +236,14 @@ const Journal: React.FC<{ onOpenThreatModal: () => void }> = ({ onOpenThreatModa
       />
 
       {activeView === 'insights' ? (
-        <MoodDashboard
-          onStartReflection={() => {
-            setActiveView('workspace');
-            void startNew();
-          }}
-        />
+        <ErrorBoundary>
+          <MoodDashboard
+            onStartReflection={() => {
+              setActiveView('workspace');
+              void startNew();
+            }}
+          />
+        </ErrorBoundary>
       ) : (
         <div className="flex-1 flex overflow-hidden">
           <EntryHistorySidebar

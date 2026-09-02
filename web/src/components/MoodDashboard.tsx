@@ -118,9 +118,9 @@ export const MoodDashboard: React.FC<MoodDashboardProps> = ({ onStartReflection 
     void loadInsights(range);
   }, [loadInsights, range]);
 
-  // Determine dominant mood overall
+  // Determine dominant mood overall (only from counts > 0)
   let dominantMoodOverall: Mood = 'neutral';
-  let maxCount = -1;
+  let maxCount = 0;
   if (data?.distribution) {
     for (const item of data.distribution) {
       if (item.count > maxCount) {
@@ -269,7 +269,7 @@ export const MoodDashboard: React.FC<MoodDashboardProps> = ({ onStartReflection 
                 <Smile className="w-4 h-4 text-[#5A5A40]" />
               </div>
               <div className="flex items-center space-x-2">
-                <span className="text-lg">{MOOD_THEME[dominantMoodOverall].emoji}</span>
+                <span className="text-lg">{(MOOD_THEME[dominantMoodOverall] || MOOD_THEME.neutral).emoji}</span>
                 <span className="text-base font-bold font-serif text-[#4A443F] capitalize">
                   {dominantMoodOverall}
                 </span>
@@ -337,7 +337,8 @@ export const MoodDashboard: React.FC<MoodDashboardProps> = ({ onStartReflection 
                       content={({ active, payload }) => {
                         if (!active || !payload || !payload.length) return null;
                         const point = payload[0].payload as MoodInsightResponse['timeline'][0];
-                        const theme = MOOD_THEME[point.dominantMood];
+                        if (!point) return null;
+                        const theme = MOOD_THEME[point.dominantMood] || MOOD_THEME.neutral;
                         return (
                           <div className="bg-[#FAF8F5] border border-[#DCD3C6] rounded-xl p-3 shadow-lg max-w-xs space-y-2 text-xs">
                             <div className="flex items-center justify-between border-b border-[#E2DDD5] pb-1.5">
@@ -361,7 +362,7 @@ export const MoodDashboard: React.FC<MoodDashboardProps> = ({ onStartReflection 
                                 <span className="text-[10px] font-bold text-[#5A5A40] block">AI Reasoning Summary:</span>
                                 <ul className="list-disc list-inside text-[10px] text-[#7D756D] space-y-0.5 leading-tight">
                                   {point.reasons.map((r, idx) => (
-                                    <li key={idx} className="truncate">{r}</li>
+                                    <li key={idx} className="truncate" title={r}>{r}</li>
                                   ))}
                                 </ul>
                               </div>
@@ -415,21 +416,22 @@ export const MoodDashboard: React.FC<MoodDashboardProps> = ({ onStartReflection 
                       {data.distribution
                         .filter((d) => d.count > 0)
                         .map((entry) => (
-                          <Cell key={entry.mood} fill={MOOD_THEME[entry.mood].color} />
+                          <Cell key={entry.mood} fill={(MOOD_THEME[entry.mood] || MOOD_THEME.neutral).color} />
                         ))}
                     </Pie>
                     <Tooltip
                       content={({ active, payload }) => {
                         if (!active || !payload || !payload.length) return null;
                         const item = payload[0].payload as MoodInsightResponse['distribution'][0];
-                        const theme = MOOD_THEME[item.mood];
+                        if (!item) return null;
+                        const theme = MOOD_THEME[item.mood] || MOOD_THEME.neutral;
                         return (
                           <div className="bg-[#FAF8F5] border border-[#DCD3C6] rounded-xl p-2.5 shadow-lg text-xs space-y-1">
                             <span className="font-bold text-[#4A443F] capitalize">
                               {theme.emoji} {item.mood}
                             </span>
                             <div className="text-[11px] text-[#7D756D]">
-                              {item.count} entries ({item.percentage}%)
+                              {item.count} {item.count === 1 ? 'entry' : 'entries'} ({item.percentage}%)
                             </div>
                           </div>
                         );
@@ -507,7 +509,11 @@ export const MoodDashboard: React.FC<MoodDashboardProps> = ({ onStartReflection 
 
               <div className="space-y-3 pt-1">
                 {data.highlights.map((entry) => {
-                  const theme = MOOD_THEME[entry.mood];
+                  const theme = MOOD_THEME[entry.mood] || MOOD_THEME.neutral;
+                  const dateObj = new Date(entry.createdAt);
+                  const dateLabel = !Number.isNaN(dateObj.getTime())
+                    ? dateObj.toLocaleDateString()
+                    : entry.createdAt;
                   return (
                     <div
                       key={entry.id}
@@ -520,7 +526,7 @@ export const MoodDashboard: React.FC<MoodDashboardProps> = ({ onStartReflection 
                           </h4>
                           <span className="text-[10px] text-[#8C827A] flex items-center space-x-1 mt-0.5">
                             <Calendar className="w-3 h-3" />
-                            <span>{new Date(entry.createdAt).toLocaleDateString()}</span>
+                            <span>{dateLabel}</span>
                           </span>
                         </div>
                         <span className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${theme.bg} ${theme.text} ${theme.border} border shrink-0`}>

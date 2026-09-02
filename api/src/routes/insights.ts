@@ -1,5 +1,6 @@
+import { randomUUID } from 'crypto';
 import express, { Request, Response, NextFunction } from 'express';
-import { InsightQuerySchema } from '@journal/shared';
+import { InsightQuerySchema, MoodInsightResponseSchema } from '@journal/shared';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { getMoodInsights } from '../services/insights.js';
@@ -17,24 +18,27 @@ router.use(rateLimit);
  */
 router.get('/mood', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const parsedQuery = InsightQuerySchema.safeParse(req.query);
+    const raw = (req.query && typeof req.query === 'object') ? req.query : {};
+    const parsedQuery = InsightQuerySchema.safeParse(raw);
     const range = parsedQuery.success ? parsedQuery.data.range : '30d';
 
     const uid = req.user!.uid;
     const insights = await getMoodInsights(uid, range);
+    const validated = MoodInsightResponseSchema.parse(insights);
 
+    const correlationId = (req.headers['x-correlation-id'] as string) || randomUUID();
     console.log(
       JSON.stringify({
         timestamp: new Date().toISOString(),
-        correlationId: req.headers['x-correlation-id'] || 'internal',
+        correlationId,
         event: 'MOOD_INSIGHTS_ACCESSED',
         uid,
         range,
-        totalEntries: insights.totalEntries,
+        totalEntries: validated.totalEntries,
       })
     );
 
-    res.json({ data: insights });
+    res.json({ data: validated });
   } catch (err) {
     next(err);
   }
