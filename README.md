@@ -103,6 +103,8 @@ Every one of these has a corresponding negative test, and each can be demonstrat
 
 **The Firebase Web config (including `apiKey`) is a public identifier, not a credential.** It ships in the client by design; its protection is Firestore Rules plus App Check. We do not pretend it is a secret.
 
+`GET /api/config/public` serves that identifier and nothing else. It has no fallback chain into another environment variable — a fallback is exactly how a restricted, billable key ends up on an unauthenticated endpoint wearing the wrong name, and how a misconfigured referrer restriction stays invisible. If the identifier is unset the endpoint returns `503`, and in production the server refuses to start at all.
+
 **The Maps JavaScript API browser key must exist in the browser and cannot be hidden.** Rather than pretending otherwise, we demote it to a key that is useless even if extracted: stored in Secret Manager, delivered **at runtime** from an authenticated `GET /api/config` (never inlined at build time), restricted by HTTP referrer, limited to the Maps JavaScript API alone, and capped by daily quota. The valuable Geocoding key is a **separate** key that never leaves the Cloud Run process.
 
 > Secret management is not "put everything in Secret Manager". It is deciding, for each key, the lowest layer it must be exposed to — and applying the right restriction at that layer.
@@ -150,10 +152,20 @@ git config core.hooksPath .githooks   # enable security hooks, once per clone
 cp web/.env.example web/.env          # Firebase Web config (public identifier)
 cp api/.env.example api/.env          # local dev only; production is injected by Secret Manager
 
-pnpm dev                              # unified entrypoint: api + web together
-pnpm test && pnpm test:rules          # includes cross-user negative cases
+pnpm dev                              # unified entrypoint: api + web together — API on :8080
+pnpm test                             # unit tests
+firebase emulators:exec --only firestore "pnpm test:rules"   # cross-user negative cases
 bash scripts/security-check.sh        # full security gate
 ```
+
+The API listens on **8080** (matching Cloud Run) and the Firestore emulator on **8085**
+([`firebase.json`](firebase.json)). They are deliberately different: a rules suite that
+connects to the API instead of the emulator either fails for a reason that has nothing to do
+with the rules, or passes without having tested them.
+
+`api/.env` needs `FIREBASE_WEB_API_KEY` and `FIREBASE_WEB_APP_ID` from Firebase Console →
+Project settings → Your apps → Web. They are public identifiers, not secrets, but the server
+refuses to start in production without them rather than serving a half-built config.
 
 ---
 
@@ -222,7 +234,7 @@ gcloud run deploy "$SERVICE" \
   --region="$REGION" \
   --service-account="$SA_EMAIL" \
   --allow-unauthenticated \
-  --set-env-vars="NODE_ENV=production,GCP_PROJECT_ID=${PROJECT_ID}" \
+  --set-env-vars="NODE_ENV=production,GCP_PROJECT_ID=${PROJECT_ID},FIREBASE_WEB_API_KEY=${FIREBASE_WEB_API_KEY},FIREBASE_WEB_APP_ID=${FIREBASE_WEB_APP_ID}" \
   --set-secrets="GEMINI_API_KEY=GEMINI_API_KEY:latest,MAPS_SERVER_API_KEY=MAPS_SERVER_API_KEY:latest,MAPS_BROWSER_API_KEY=MAPS_BROWSER_API_KEY:latest" \
   --labels="dev-tutorial=cloud-run-ai-challenge" \
   --min-instances=0 --max-instances=5 \
@@ -265,6 +277,8 @@ curl -s "$URL/healthz"                                              # {"ok":true
 curl -s -o /dev/null -w "%{http_code}\n" "$URL/api/entries"         # 401 — unauthenticated
 curl -s -o /dev/null -w "%{http_code}\n" \
   -H "Authorization: Bearer $USER_TOKEN" "$URL/api/admin/stats"     # 403 — not an admin
+curl -s -o /dev/null -w "%{http_code}\n" "$URL/api/config"          # 401 — Maps browser key needs a token
+curl -s "$URL/api/config/public"                                    # Firebase identifier only, never a Maps key
 grep -rc "AIza" web/dist/ | grep -v ':0$' || echo "0 — no key in the bundle"
 gcloud run services describe "$SERVICE" --region="$REGION" \
   --format="value(metadata.labels)"                                 # dev-tutorial=...

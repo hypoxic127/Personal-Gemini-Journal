@@ -10,6 +10,12 @@ import * as path from 'path';
 
 let testEnv: RulesTestEnvironment;
 
+// Must match firebase.json → emulators.firestore.port. Deliberately NOT 8080: the API dev
+// server owns that port, and a rules suite that quietly connects to Express instead of the
+// emulator either fails for the wrong reason or passes without testing anything.
+const EMULATOR_HOST = process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8085';
+const [emulatorHost, emulatorPort] = EMULATOR_HOST.split(':');
+
 describe('Firestore Security Rules Matrix (Root Hardened Rules)', () => {
   beforeAll(async () => {
     const rulesPath = path.resolve(__dirname, '../firestore.rules');
@@ -18,8 +24,8 @@ describe('Firestore Security Rules Matrix (Root Hardened Rules)', () => {
       projectId: 'demo-rules-test',
       firestore: {
         rules,
-        host: '127.0.0.1',
-        port: 8080,
+        host: emulatorHost,
+        port: parseInt(emulatorPort, 10),
       },
     });
   });
@@ -52,6 +58,19 @@ describe('Firestore Security Rules Matrix (Root Hardened Rules)', () => {
     });
     const userADb = testEnv.authenticatedContext('userA').firestore();
     await assertSucceeds(userADb.doc('users/userA/entries/e1').get());
+  });
+
+  // `get` and `list` are separate operations in Firestore. A suite that only asserts on
+  // doc().get() proves nothing about whether a collection can be enumerated, which is the
+  // shape a real cross-user probe takes: read the whole collection and see what comes back.
+  it('POS-ENT-02: User A can LIST own entries collection', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().doc('users/userA/entries/e1').set({ title: 'My Entry' });
+      await context.firestore().doc('users/userA/entries/e2').set({ title: 'Second Entry' });
+    });
+    const userADb = testEnv.authenticatedContext('userA').firestore();
+    const snap = await assertSucceeds(userADb.collection('users/userA/entries').get());
+    expect(snap.size).toBe(2);
   });
 
   it('POS-SES-01: User A can read own sessions & messages', async () => {
@@ -98,6 +117,36 @@ describe('Firestore Security Rules Matrix (Root Hardened Rules)', () => {
     await assertFails(userBDb.doc('users/userA/entries/entry1').get());
   });
 
+  it('NEG-ENT-01: User B LISTING User A entries collection is DENIED', async () => {
+    // Seeded with real documents so the query has something to return if the rule leaks —
+    // an empty collection would pass this test even against a broken rule.
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().doc('users/userA/entries/e1').set({ title: 'Private Entry' });
+      await context.firestore().doc('users/userA/entries/e2').set({ title: 'Private Entry 2' });
+    });
+    const userBDb = testEnv.authenticatedContext('userB').firestore();
+    await assertFails(userBDb.collection('users/userA/entries').get());
+  });
+
+  it('NEG-SES-02: User B LISTING User A sessions and messages is DENIED', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().doc('users/userA/sessions/s1').set({ title: 'Session 1' });
+      await context.firestore().doc('users/userA/sessions/s1/messages/m1').set({ text: 'Private' });
+    });
+    const userBDb = testEnv.authenticatedContext('userB').firestore();
+    await assertFails(userBDb.collection('users/userA/sessions').get());
+    await assertFails(userBDb.collection('users/userA/sessions/s1/messages').get());
+  });
+
+  it('NEG-USR-01: Any signed-in user LISTING the users collection is DENIED (no uid enumeration)', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().doc('users/userA').set({ displayName: 'Alice' });
+      await context.firestore().doc('users/userB').set({ displayName: 'Bob' });
+    });
+    const userBDb = testEnv.authenticatedContext('userB').firestore();
+    await assertFails(userBDb.collection('users').get());
+  });
+
   it('NEG-ENT-04: User A attempting to self-elevate role in doc is DENIED', async () => {
     const userADb = testEnv.authenticatedContext('userA').firestore();
     await assertFails(userADb.doc('users/userA').update({ role: 'admin' }));
@@ -111,6 +160,14 @@ describe('Firestore Security Rules Matrix (Root Hardened Rules)', () => {
   it('NEG-ADM-04: Admin-claim user reading User A entries is DENIED (Admin sees aggregates, not content)', async () => {
     const adminDb = testEnv.authenticatedContext('adminUser', { role: 'admin' }).firestore();
     await assertFails(adminDb.doc('users/userA/entries/entry1').get());
+  });
+
+  it('NEG-ADM-07: Admin-claim user LISTING User A entries is DENIED (aggregates, never content)', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().doc('users/userA/entries/e1').set({ summary: 'Private summary' });
+    });
+    const adminDb = testEnv.authenticatedContext('adminUser', { role: 'admin' }).firestore();
+    await assertFails(adminDb.collection('users/userA/entries').get());
   });
 
   it('NEG-ADM-05: Admin reading audit_logs is DENIED (Audit logs are backend-only)', async () => {

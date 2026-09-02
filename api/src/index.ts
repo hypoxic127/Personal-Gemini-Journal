@@ -67,15 +67,13 @@ app.get('/health', (_req: Request, res: Response) => {
   res.status(200).json({ ok: true });
 });
 
-// 5. API Routes Placeholder (will be extended in M1-M5)
+// 5. API Routes. /healthz is the only route that may skip requireAuth; every other
+//    route mounts it (AGENTS.md §Identity and authorization 1). No unauthenticated debug
+//    or echo endpoints — they are free reconnaissance and they rot into real surface.
 const apiRouter = express.Router();
 
 apiRouter.get('/healthz', (_req: Request, res: Response) => {
   res.status(200).json({ ok: true });
-});
-
-apiRouter.get('/ping', (_req: Request, res: Response) => {
-  res.json({ data: { message: 'pong' } });
 });
 
 apiRouter.use('/auth', authRouter);

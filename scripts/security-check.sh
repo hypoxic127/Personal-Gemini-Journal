@@ -11,9 +11,11 @@ cd "$(git rev-parse --show-toplevel)" || exit 1
 FAIL=0
 pass() { printf '  \033[32m✔\033[0m %s\n' "$1"; }
 fail() { printf '  \033[31m✘\033[0m %s\n' "$1"; FAIL=1; }
-head() { printf '\n\033[1m%s\033[0m\n' "$1"; }
+# Named `section`, not `head`: a function called `head` shadows the `head` command for the
+# whole script, which silently breaks every `head -c` / `head -n` used by a check below.
+section() { printf '\n\033[1m%s\033[0m\n' "$1"; }
 
-head "1 · Secret leakage"
+section "1 · Secret leakage"
 
 # 1a — no Google API key in the built bundle
 if [ -d web/dist ]; then
@@ -27,7 +29,8 @@ else
   printf '  \033[33m–\033[0m web/dist not present — skipped (run pnpm build before deploying, then re-run)\n'
 fi
 
-# 1b — no hardcoded key in source
+# 1b — no hardcoded key in source. No exemptions, including for tests: the fixtures in
+# api/test/config.test.ts assemble their key-shaped strings at runtime for this reason.
 if grep -rn "AIza[0-9A-Za-z_-]\{20,\}" --include="*.ts" --include="*.tsx" \
      --include="*.js" --include="*.json" api/ web/ shared/ 2>/dev/null | grep -v node_modules; then
   fail "hardcoded API key found in source"
@@ -55,7 +58,7 @@ if git rev-parse --verify --quiet "${RANGE%%..*}" >/dev/null 2>&1; then
   fi
 fi
 
-head "2 · Firestore rules"
+section "2 · Firestore rules"
 
 # 2a — no permissive rule
 if grep -nE 'allow[[:space:]]+(read|write|read,[[:space:]]*write)[[:space:]]*:[[:space:]]*if[[:space:]]+true' \
@@ -88,7 +91,15 @@ else
   fail "test/firestore.rules.test.ts is missing — isolation has no test coverage at all"
 fi
 
-head "3 · Types and static analysis"
+# 2d — get and list are separate Firestore operations. A suite that only exercises
+# doc().get() proves nothing about whether a collection can be enumerated.
+if grep -q "collection('users/userA/entries')" test/firestore.rules.test.ts 2>/dev/null; then
+  pass "rules suite covers list (collection enumeration), not just get"
+else
+  fail "rules suite has no cross-user list/enumeration case — get-only coverage is a gap"
+fi
+
+section "3 · Types and static analysis"
 
 if command -v pnpm >/dev/null 2>&1; then
   pnpm typecheck >/dev/null 2>&1 && pass "typecheck"    || fail "typecheck failed"
@@ -98,7 +109,49 @@ else
   fail "pnpm not found"
 fi
 
-head "4 · Dangerous patterns"
+section "4 · Config hygiene"
+
+# 4a — a UTF-8 BOM (EF BB BF) makes dotenv read the first key as U+FEFF + "NODE_ENV", so
+# NODE_ENV comes back unset and the process silently runs in development mode. An afternoon
+# to diagnose, three bytes to prevent.
+BOM_FOUND=0
+for f in $(git ls-files | grep -E '(^|/)\.env\.example$'); do
+  if [ "$(head -c 3 "$f" | od -An -tx1 | tr -d '[:space:]')" = "efbbbf" ]; then
+    fail "$f starts with a UTF-8 BOM — dotenv would fold it into the first key name"
+    BOM_FOUND=1
+  fi
+done
+[ "$BOM_FOUND" -eq 0 ] && pass "no BOM in any .env.example"
+
+# 4b — the Firestore emulator and the API must not share a port. If they do, running
+# `pnpm test:rules` while `pnpm dev` is up points the rules suite at Express: it either
+# fails for a reason unrelated to the rules, or passes without having tested them.
+EMU_PORT=$(grep -A3 '"emulators"' firebase.json | grep '"port"' | grep -oE '[0-9]+' | head -1)
+API_PORT=$(grep -E '^PORT=' api/.env.example | cut -d= -f2 | tr -d '[:space:]')
+if [ -z "$EMU_PORT" ]; then
+  fail "could not read the Firestore emulator port from firebase.json"
+elif [ "$EMU_PORT" = "$API_PORT" ]; then
+  fail "Firestore emulator and API both use port $EMU_PORT — the rules suite would hit the API"
+else
+  pass "emulator port ($EMU_PORT) and API port ($API_PORT) do not collide"
+fi
+
+# 4c — GET /api/config/public is unauthenticated by necessity: the SPA needs the Firebase
+# Web config before it can sign anyone in. Only that public identifier may be served there.
+# A Maps key reached through a `||` fallback is how a restricted, billable credential ends
+# up on an anonymous endpoint wearing someone else's name.
+if awk '
+  index($0, "router.get(") && index($0, "/public") { inblock = 1 }
+  inblock && index($0, "MAPS_")                    { found = 1 }
+  inblock && index($0, "});") == 1                 { inblock = 0 }
+  END { exit !found }
+' api/src/routes/config.ts; then
+  fail "GET /api/config/public can reach a Maps key — that route is unauthenticated"
+else
+  pass "public config route cannot reach a Maps key"
+fi
+
+section "5 · Dangerous patterns"
 
 if grep -rn "dangerouslySetInnerHTML" --include="*.tsx" web/src 2>/dev/null; then
   fail "dangerouslySetInnerHTML is in use"

@@ -1,4 +1,4 @@
-import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
+import { initializeApp, getApps, getApp, FirebaseApp, FirebaseOptions } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, Auth } from 'firebase/auth';
 import { getFirestore, Firestore } from 'firebase/firestore';
 
@@ -27,26 +27,28 @@ export async function initFirebaseClient(): Promise<{ app: FirebaseApp; auth: Au
     return { app, auth, db };
   }
 
-  let config: any = {
+  // The Firebase Web config is a public identifier, not a credential — but it is still
+  // fetched at runtime rather than inlined at build time, so the same container image can
+  // serve any project and no key-shaped string is ever baked into the bundle.
+  let config: FirebaseOptions = {
     apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
     authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
     projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
     appId: import.meta.env.VITE_FIREBASE_APP_ID,
   };
 
-  // If not present in build env, fetch at runtime from backend
+  // If not present in build env, fetch at runtime from backend. This is the path the
+  // deployed build always takes.
   if (!config.apiKey || !config.projectId) {
-    try {
-      const res = await fetch('/api/config/public');
-      if (res.ok) {
-        const json = await res.json();
-        if (json?.data?.firebase) {
-          config = json.data.firebase;
-        }
-      }
-    } catch (e) {
-      console.warn('Failed to fetch runtime Firebase config:', e);
+    const res = await fetch('/api/config/public');
+    if (!res.ok) {
+      throw new Error(`Runtime configuration unavailable (${res.status})`);
     }
+    const json = await res.json();
+    if (!json?.data?.firebase?.apiKey || !json?.data?.firebase?.projectId) {
+      throw new Error('Runtime configuration is incomplete');
+    }
+    config = json.data.firebase as FirebaseOptions;
   }
 
   app = initializeApp(config);

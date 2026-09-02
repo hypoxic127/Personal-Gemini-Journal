@@ -6,8 +6,8 @@ import {
   signOut as firebaseSignOut,
   onIdTokenChanged,
 } from 'firebase/auth';
-import { initFirebaseClient, googleProvider } from '../lib/firebase';
-import { api } from '../lib/api';
+import { initFirebaseClient, getFirebaseServices, googleProvider } from '../lib/firebase';
+import { api, setUnauthorizedHandler, SESSION_EXPIRED_MESSAGE } from '../lib/api';
 
 export interface UserProfile {
   uid: string;
@@ -42,6 +42,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [role, setRole] = useState<'user' | 'admin'>('user');
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [authError, setAuthError] = useState<string | null>(null);
+  // Kept separate from authError: the sign-out below re-enters onIdTokenChanged, which
+  // clears authError. This flag survives that and is cleared only by a successful sign-in.
+  const [sessionExpired, setSessionExpired] = useState<boolean>(false);
 
   const syncUserWithBackend = async (currentUser: User) => {
     try {
@@ -65,6 +68,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // The API client calls this when a request is still 401 after a forced token refresh —
+  // the token was revoked or the account is gone, so the only correct move is a clean
+  // sign-out plus an explicit prompt to sign in again.
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      setSessionExpired(true);
+      const { auth } = getFirebaseServices();
+      if (auth?.currentUser) {
+        firebaseSignOut(auth).catch((err) => {
+          console.error('Sign-out after session expiry failed:', err);
+        });
+      }
+    });
+    return () => setUnauthorizedHandler(null);
+  }, []);
+
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
 
@@ -82,6 +101,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setUser(currentUser);
             setToken(idToken);
             setRole(customRole);
+            setSessionExpired(false);
 
             await syncUserWithBackend(currentUser);
           } catch (err: any) {
@@ -111,6 +131,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!authInstance) return;
     setIsLoading(true);
     setAuthError(null);
+    setSessionExpired(false);
     try {
       await signInWithPopup(authInstance, googleProvider);
     } catch (err: any) {
@@ -143,7 +164,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         token,
         role,
         isLoading,
-        authError,
+        authError: authError ?? (sessionExpired ? SESSION_EXPIRED_MESSAGE : null),
         signInWithGoogle,
         signOut,
         refreshProfile,
