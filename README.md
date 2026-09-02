@@ -6,7 +6,9 @@
 >
 > Gen AI Academy (APAC) · Ideathon Challenge submission
 
-**Live URL**: `<fill in after deploy>`
+**Live URL**: `https://journal-app-929879106247.asia-southeast1.run.app`  
+**GCP Project**: `gemini-journal-62441`  
+**Region**: `asia-southeast1` (Singapore)
 
 ---
 
