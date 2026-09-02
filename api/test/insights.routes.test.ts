@@ -104,6 +104,7 @@ describe('GET /api/insights/mood (M3 Mood Insights API)', () => {
           tags: ['security', 'milestone'],
         },
       ],
+      truncated: false,
     };
 
     mockInsightsService.getMoodInsights.mockResolvedValueOnce(sampleData);
@@ -123,6 +124,7 @@ describe('GET /api/insights/mood (M3 Mood Insights API)', () => {
     expect(body.data.averageMoodScore).toBe(4.33);
     expect(body.data.timeline.length).toBe(2);
     expect(body.data.distribution.length).toBe(7);
+    expect(body.data.truncated).toBe(false);
   });
 
   it('POS-INSIGHT-02: empty entries returns clean empty dataset without crashing', async () => {
@@ -142,6 +144,7 @@ describe('GET /api/insights/mood (M3 Mood Insights API)', () => {
       ],
       topTags: [],
       highlights: [],
+      truncated: false,
     };
 
     mockInsightsService.getMoodInsights.mockResolvedValueOnce(emptyData);
@@ -155,27 +158,27 @@ describe('GET /api/insights/mood (M3 Mood Insights API)', () => {
     expect(body.data.totalEntries).toBe(0);
     expect(body.data.averageMoodScore).toBe(0);
     expect(body.data.timeline).toEqual([]);
+    expect(body.data.truncated).toBe(false);
   });
 
-  it('NEG-INSIGHT-02: invalid range query gracefully falls back to default 30d range', async () => {
-    const sampleData = {
-      range: '30d' as const,
-      totalEntries: 1,
-      averageMoodScore: 3.0,
-      timeline: [],
-      distribution: [],
-      topTags: [],
-      highlights: [],
-    };
-
-    mockInsightsService.getMoodInsights.mockResolvedValueOnce(sampleData);
-
+  it('NEG-MOOD-01: invalid range query returns HTTP 400 BAD_REQUEST', async () => {
     const res = await fetch(baseUrl + '/api/insights/mood?range=invalid_range_hack', {
       headers: { Authorization: 'Bearer token_user_alice' },
     });
 
-    expect(res.status).toBe(200);
-    expect(mockInsightsService.getMoodInsights).toHaveBeenCalledWith('user_alice', '30d');
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error?.code).toBe('BAD_REQUEST');
+  });
+
+  it('NEG-MOOD-02: empty range query string returns HTTP 400 BAD_REQUEST', async () => {
+    const res = await fetch(baseUrl + '/api/insights/mood?range=', {
+      headers: { Authorization: 'Bearer token_user_alice' },
+    });
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error?.code).toBe('BAD_REQUEST');
   });
 
   it('NEG-INSIGHT-03: malformed service output fails Zod schema validation with 500 error', async () => {
@@ -196,7 +199,7 @@ describe('GET /api/insights/mood (M3 Mood Insights API)', () => {
     expect(body.error).toBeDefined();
   });
 
-  it('NEG-INSIGHT-04: client-supplied uid in query or header is ignored (tenant isolation)', async () => {
+  it('NEG-INSIGHT-04: client-supplied spoofed identity header is ignored (tenant isolation)', async () => {
     const sampleData = {
       range: '30d' as const,
       totalEntries: 0,
@@ -205,11 +208,12 @@ describe('GET /api/insights/mood (M3 Mood Insights API)', () => {
       distribution: [],
       topTags: [],
       highlights: [],
+      truncated: false,
     };
 
     mockInsightsService.getMoodInsights.mockResolvedValueOnce(sampleData);
 
-    const res = await fetch(baseUrl + '/api/insights/mood?uid=victim_user&userId=attacker', {
+    const res = await fetch(baseUrl + '/api/insights/mood?range=30d', {
       headers: {
         Authorization: 'Bearer token_user_alice',
         'x-user-id': 'spoofed_user',
@@ -221,6 +225,18 @@ describe('GET /api/insights/mood (M3 Mood Insights API)', () => {
     expect(mockInsightsService.getMoodInsights).toHaveBeenCalledWith('user_alice', '30d');
   });
 
+  it('NEG-INSIGHT-05: unknown query parameters are rejected with 400 (strict schema validation)', async () => {
+    const res = await fetch(baseUrl + '/api/insights/mood?uid=victim_user', {
+      headers: {
+        Authorization: 'Bearer token_user_alice',
+      },
+    });
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error?.code).toBe('BAD_REQUEST');
+  });
+
   it('POS-INSIGHT-03: supports 7d, 30d, and 90d query range options', async () => {
     const emptyData = {
       range: '90d' as const,
@@ -230,6 +246,7 @@ describe('GET /api/insights/mood (M3 Mood Insights API)', () => {
       distribution: [],
       topTags: [],
       highlights: [],
+      truncated: false,
     };
 
     mockInsightsService.getMoodInsights.mockResolvedValueOnce(emptyData);
@@ -240,5 +257,37 @@ describe('GET /api/insights/mood (M3 Mood Insights API)', () => {
 
     expect(res.status).toBe(200);
     expect(mockInsightsService.getMoodInsights).toHaveBeenCalledWith('user_alice', '90d');
+  });
+
+  it('POS-INSIGHT-04: omitted range query defaults to 30d', async () => {
+    const defaultData = {
+      range: '30d' as const,
+      totalEntries: 0,
+      averageMoodScore: 0,
+      timeline: [],
+      distribution: [],
+      topTags: [],
+      highlights: [],
+      truncated: false,
+    };
+
+    mockInsightsService.getMoodInsights.mockResolvedValueOnce(defaultData);
+
+    const res = await fetch(baseUrl + '/api/insights/mood', {
+      headers: { Authorization: 'Bearer token_user_alice' },
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockInsightsService.getMoodInsights).toHaveBeenCalledWith('user_alice', '30d');
+  });
+
+  it('NEG-INSIGHT-06: query with unexpected extra parameter is rejected with 400 BAD_REQUEST', async () => {
+    const res = await fetch(baseUrl + '/api/insights/mood?range=30d&extraParam=malicious', {
+      headers: { Authorization: 'Bearer token_user_alice' },
+    });
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error?.code).toBe('BAD_REQUEST');
   });
 });

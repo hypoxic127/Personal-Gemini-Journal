@@ -15,7 +15,7 @@ const entriesCol = (uid: string) => db.collection(`users/${uid}/entries`);
 
 const MAX_INSIGHT_QUERY_LIMIT = 500;
 
-export const toIso = (value: unknown): string => {
+export const toIso = (value: unknown): string | null => {
   try {
     if (value && typeof (value as any).toDate === 'function') {
       try {
@@ -39,13 +39,16 @@ export const toIso = (value: unknown): string => {
       if (!Number.isNaN(value.getTime())) return value.toISOString();
     }
     if (typeof value === 'string') {
-      const parsed = Date.parse(value);
-      if (!Number.isNaN(parsed)) return new Date(parsed).toISOString();
+      const trimmed = value.trim();
+      if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
+        const parsed = Date.parse(trimmed);
+        if (!Number.isNaN(parsed)) return new Date(parsed).toISOString();
+      }
     }
   } catch {
-    // fallback to current ISO string
+    return null;
   }
-  return new Date().toISOString();
+  return null;
 };
 
 const RANGE_DAYS: Record<InsightRange, number> = {
@@ -88,6 +91,17 @@ export async function getMoodInsights(
   for (const doc of snap.docs) {
     const data = doc.data();
     const createdAtIso = toIso(data.createdAt);
+    if (!createdAtIso) {
+      console.warn(
+        JSON.stringify({
+          timestamp: new Date().toISOString(),
+          event: 'CORRUPT_ENTRY_TIMESTAMP_SKIPPED',
+          docId: doc.id,
+          uid,
+        })
+      );
+      continue;
+    }
     const dateKey = createdAtIso.slice(0, 10); // YYYY-MM-DD
     const moodParsed = MoodEnum.safeParse(data.mood);
     const mood: Mood = moodParsed.success ? moodParsed.data : 'neutral';
@@ -223,5 +237,6 @@ export async function getMoodInsights(
     distribution,
     topTags,
     highlights,
+    truncated: (snap.size ?? snap.docs.length) >= MAX_INSIGHT_QUERY_LIMIT,
   };
 }

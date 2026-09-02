@@ -22,6 +22,7 @@ const mockQuery = {
       id: d.id || `doc_${index}`,
       data: () => d,
     })),
+    size: mockDocs.length,
   })),
 };
 
@@ -91,6 +92,7 @@ describe('Insights Service Unit Tests (getMoodInsights)', () => {
     expect(res.totalEntries).toBe(3);
     // (4.5 + 3.5 + 4.0) / 3 = 12 / 3 = 4.0
     expect(res.averageMoodScore).toBe(4.0);
+    expect(res.truncated).toBe(false);
 
     // Timeline should have 2 days sorted chronologically (2026-09-01, 2026-09-02)
     expect(res.timeline.length).toBe(2);
@@ -137,6 +139,7 @@ describe('Insights Service Unit Tests (getMoodInsights)', () => {
     expect(res.timeline).toEqual([]);
     expect(res.topTags).toEqual([]);
     expect(res.highlights).toEqual([]);
+    expect(res.truncated).toBe(false);
     expect(res.distribution.length).toBe(7);
     for (const item of res.distribution) {
       expect(item.count).toBe(0);
@@ -144,7 +147,7 @@ describe('Insights Service Unit Tests (getMoodInsights)', () => {
     }
   });
 
-  it('POS-INSIGHT-SVC-03: preserves Date, duck-typed Timestamp, and ISO string timestamps without overwriting with current time', () => {
+  it('POS-INSIGHT-SVC-03: preserves Date, duck-typed Timestamp, and ISO string timestamps, returning null for unparseable timestamps', () => {
     const rawDate = new Date('2026-08-10T12:00:00.000Z');
     const isoString = '2026-08-15T08:30:00.000Z';
     const ts = Timestamp.fromDate(rawDate);
@@ -157,13 +160,18 @@ describe('Insights Service Unit Tests (getMoodInsights)', () => {
     expect(toIso(duckTs)).toBe('2026-08-12T00:00:00.000Z');
     expect(toIso(secondsObj)).toContain('Z');
 
-    // Robustness against malformed, NaN, or throwing objects
-    expect(toIso({ _seconds: NaN })).toContain('Z');
-    expect(toIso({ seconds: Infinity })).toContain('Z');
-    expect(toIso({ toDate: () => { throw new Error('boom'); } })).toContain('Z');
-    expect(toIso('not-a-valid-date-string')).toContain('Z');
-    expect(toIso(null)).toContain('Z');
-    expect(toIso(undefined)).toContain('Z');
+    // Robustness against malformed, NaN, or throwing objects - returns null
+    expect(toIso({ _seconds: NaN })).toBeNull();
+    expect(toIso({ seconds: Infinity })).toBeNull();
+    expect(toIso({ _seconds: 'not-a-number' })).toBeNull();
+    expect(toIso({ toDate: () => { throw new Error('boom'); } })).toBeNull();
+    expect(toIso({ toDate: () => new Date('invalid') })).toBeNull();
+    expect(toIso(new Date('invalid'))).toBeNull();
+    expect(toIso('not-a-valid-date-string')).toBeNull();
+    expect(toIso('')).toBeNull();
+    expect(toIso(12345678)).toBeNull();
+    expect(toIso(null)).toBeNull();
+    expect(toIso(undefined)).toBeNull();
   });
 
   it('POS-INSIGHT-SVC-04: clamps out-of-bounds scores to [-5, 5] and handles NaN scores safely', async () => {
@@ -262,4 +270,89 @@ describe('Insights Service Unit Tests (getMoodInsights)', () => {
     const parsed = MoodInsightResponseSchema.safeParse(res);
     expect(parsed.success).toBe(true);
   });
+
+  it('NEG-INSIGHT-SVC-09: skips entries with corrupted timestamps and logs structured warning', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mockDocs = [
+      {
+        id: 'corrupt_1',
+        title: 'Corrupt Date Entry',
+        mood: 'joyful',
+        moodScore: 5,
+        createdAt: 'totally-invalid-date',
+      },
+      {
+        id: 'valid_1',
+        title: 'Valid Date Entry',
+        mood: 'calm',
+        moodScore: 3,
+        createdAt: Timestamp.fromDate(new Date('2026-09-02T10:00:00.000Z')),
+      },
+    ];
+
+    const res = await getMoodInsights('user_corrupt', '30d');
+    expect(res.totalEntries).toBe(1);
+    expect(res.highlights.length).toBe(1);
+    expect(res.highlights[0].id).toBe('valid_1');
+    expect(warnSpy).toHaveBeenCalled();
+    const loggedCall = warnSpy.mock.calls.find((call) =>
+      typeof call[0] === 'string' && call[0].includes('CORRUPT_ENTRY_TIMESTAMP_SKIPPED')
+    );
+    expect(loggedCall).toBeDefined();
+    expect(loggedCall?.[0]).toContain('corrupt_1');
+    expect(loggedCall?.[0]).toContain('user_corrupt');
+    warnSpy.mockRestore();
+  });
+
+  it('POS-INSIGHT-SVC-10: returns truncated: true when query reaches maximum limit (500)', async () => {
+    mockDocs = Array.from({ length: 500 }, (_, i) => ({
+      id: `entry_${i}`,
+      title: `Reflection ${i}`,
+      mood: 'calm',
+      moodScore: 3,
+      createdAt: Timestamp.fromDate(new Date('2026-09-02T10:00:00.000Z')),
+    }));
+
+    const res = await getMoodInsights('user_trunc', '30d');
+    expect(res.truncated).toBe(true);
+    expect(res.totalEntries).toBe(500);
+    const parsed = MoodInsightResponseSchema.safeParse(res);
+    expect(parsed.success).toBe(true);
+  });
+
+  it('POS-INSIGHT-SVC-11: returns truncated: false when query result count is below maximum limit (499)', async () => {
+    mockDocs = Array.from({ length: 499 }, (_, i) => ({
+      id: `entry_${i}`,
+      title: `Reflection ${i}`,
+      mood: 'calm',
+      moodScore: 3,
+      createdAt: Timestamp.fromDate(new Date('2026-09-02T10:00:00.000Z')),
+    }));
+
+    const res = await getMoodInsights('user_not_trunc', '30d');
+    expect(res.truncated).toBe(false);
+    expect(res.totalEntries).toBe(499);
+    const parsed = MoodInsightResponseSchema.safeParse(res);
+    expect(parsed.success).toBe(true);
+  });
+
+  it('NEG-INSIGHT-SVC-12: safely returns empty dataset when all entries have corrupted timestamps', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mockDocs = [
+      { id: 'bad_1', createdAt: 'invalid-1' },
+      { id: 'bad_2', createdAt: { _seconds: NaN } },
+      { id: 'bad_3', createdAt: null },
+    ];
+
+    const res = await getMoodInsights('user_all_corrupt', '30d');
+    expect(res.totalEntries).toBe(0);
+    expect(res.averageMoodScore).toBe(0);
+    expect(res.timeline).toEqual([]);
+    expect(res.highlights).toEqual([]);
+    expect(res.topTags).toEqual([]);
+    expect(res.truncated).toBe(false);
+    expect(warnSpy).toHaveBeenCalledTimes(3);
+    warnSpy.mockRestore();
+  });
 });
+

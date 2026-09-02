@@ -226,6 +226,17 @@ export const MoodDashboard: React.FC<MoodDashboardProps> = ({ onStartReflection 
       {/* Active Data Visualizations */}
       {!isLoading && !error && data && data.totalEntries > 0 && (
         <div className="space-y-6">
+          {/* Truncation Notice Banner */}
+          {data.truncated && (
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center space-x-3 text-amber-900 shadow-2xs">
+              <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
+              <div className="text-xs">
+                <span className="font-semibold">Display limit reached: </span>
+                <span>Showing insights based on the most recent 500 entries in this timeframe.</span>
+              </div>
+            </div>
+          )}
+
           {/* Summary Stat Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Card 1: Total Entries */}

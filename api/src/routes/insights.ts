@@ -3,6 +3,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import { InsightQuerySchema, MoodInsightResponseSchema } from '@journal/shared';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { rateLimit } from '../middleware/rateLimit.js';
+import { fromZodError } from '../lib/errors.js';
 import { getMoodInsights } from '../services/insights.js';
 
 const router = express.Router();
@@ -20,7 +21,11 @@ router.get('/mood', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const raw = (req.query && typeof req.query === 'object') ? req.query : {};
     const parsedQuery = InsightQuerySchema.safeParse(raw);
-    const range = parsedQuery.success ? parsedQuery.data.range : '30d';
+    if (!parsedQuery.success) {
+      next(fromZodError(parsedQuery.error, 'Invalid insight query options.'));
+      return;
+    }
+    const range = parsedQuery.data.range;
 
     const uid = req.user!.uid;
     const insights = await getMoodInsights(uid, range);

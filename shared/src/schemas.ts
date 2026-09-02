@@ -166,7 +166,7 @@ export const InsightRangeEnum = z.enum(['7d', '30d', '90d']);
 export type InsightRange = z.infer<typeof InsightRangeEnum>;
 
 export const InsightQuerySchema = z.object({
-  range: InsightRangeEnum.catch('30d').default('30d'),
+  range: InsightRangeEnum.default('30d'),
 }).strict();
 export type InsightQueryInput = z.infer<typeof InsightQuerySchema>;
 
@@ -211,5 +211,6 @@ export const MoodInsightResponseSchema = z.object({
   distribution: z.array(MoodDistributionItemSchema),
   topTags: z.array(TagFrequencySchema),
   highlights: z.array(MoodHighlightEntrySchema),
+  truncated: z.boolean(),
 });
 export type MoodInsightResponse = z.infer<typeof MoodInsightResponseSchema>;
