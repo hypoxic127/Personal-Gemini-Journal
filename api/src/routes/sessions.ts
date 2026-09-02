@@ -7,12 +7,14 @@ import {
   FinalizeSessionSchema,
   ListQuerySchema,
   MAX_HISTORY_TURNS,
+  type LocationData,
 } from '@journal/shared';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { rateLimit, aiRateLimit } from '../middleware/rateLimit.js';
 import { badRequest, conflict, fromZodError, notFound, AppError } from '../lib/errors.js';
 import * as sessions from '../services/sessions.js';
 import * as gemini from '../services/gemini.js';
+import * as placesService from '../services/places.js';
 
 const router = express.Router();
 
@@ -325,9 +327,18 @@ router.post(
       // unvalidated draft has no path to Firestore.
       const { draft, model } = await gemini.generateEntryDraft({ turns, correlationId });
 
+      let locationData: LocationData | null = null;
+      if (parsed.data.location) {
+        locationData = await placesService.resolveLocation(
+          parsed.data.location.lat,
+          parsed.data.location.lng,
+          { correlationId }
+        );
+      }
+
       let entry;
       try {
-        entry = await sessions.finalizeSession(uid, sessionId, draft, model);
+        entry = await sessions.finalizeSession(uid, sessionId, draft, model, locationData);
       } catch (err) {
         if (err instanceof AppError) throw err; // 404 / 409 raised inside the transaction
         throw saveFailed(err, { correlationId, uid, sessionId, step: 'finalizeSession' });

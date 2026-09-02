@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   Copy,
   FileText,
+  MapPin,
   RefreshCw,
   Send,
   Sparkles,
@@ -12,6 +13,7 @@ import {
 } from 'lucide-react';
 import { MESSAGE_TEXT_LIMIT, type EntryDoc, type MessageDoc, type SessionDoc } from '@journal/shared';
 import { SafeMarkdown } from './SafeMarkdown';
+import { journalApi } from '../lib/journalApi';
 
 /**
  * Ported from the AI Studio baseline. Two things changed, both structural:
@@ -31,7 +33,7 @@ export interface ReflectionWorkspaceProps {
   loadError: string | null;
   onReloadMessages: () => void;
   onSend: (text: string) => Promise<{ ok: boolean; error?: string }>;
-  onFinalize: () => Promise<{ ok: boolean; error?: string }>;
+  onFinalize: (location?: { lat: number; lng: number } | null) => Promise<{ ok: boolean; error?: string }>;
   onRequestDelete: (session: SessionDoc) => void;
   isSending: boolean;
   isFinalizing: boolean;
@@ -73,6 +75,13 @@ export const ReflectionWorkspace: React.FC<ReflectionWorkspaceProps> = ({
   const [finalizeError, setFinalizeError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  // Location Privacy Triad State (Opt-in by default, precision degradation)
+  const [locationOptIn, setLocationOptIn] = useState(false);
+  const [locationCoords, setLocationCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [placeNamePreview, setPlaceNamePreview] = useState<string | null>(null);
+  const [isFetchingLocation, setIsFetchingLocation] = useState(false);
+  const [locationNotice, setLocationNotice] = useState<string | null>(null);
+
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -80,7 +89,67 @@ export const ReflectionWorkspace: React.FC<ReflectionWorkspaceProps> = ({
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isSending]);
 
+  // Reset location capture state when session changes
+  useEffect(() => {
+    setLocationOptIn(false);
+    setLocationCoords(null);
+    setPlaceNamePreview(null);
+    setLocationNotice(null);
+  }, [session?.id]);
+
   const isFinalized = session?.status === 'finalized';
+
+  const handleToggleLocation = () => {
+    if (locationOptIn) {
+      setLocationOptIn(false);
+      setLocationCoords(null);
+      setPlaceNamePreview(null);
+      setLocationNotice(null);
+      return;
+    }
+
+    if (!('geolocation' in navigator)) {
+      setLocationNotice('Geolocation is not supported in this browser.');
+      return;
+    }
+
+    setIsFetchingLocation(true);
+    setLocationNotice(null);
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        // Precision degradation (~1.1 km city-level resolution)
+        const rawLat = position.coords.latitude;
+        const rawLng = position.coords.longitude;
+        const lat = Number(rawLat.toFixed(2));
+        const lng = Number(rawLng.toFixed(2));
+        const coords = { lat, lng };
+
+        setLocationCoords(coords);
+        setLocationOptIn(true);
+        setIsFetchingLocation(false);
+
+        try {
+          const rev = await journalApi.reverseGeocode(lat, lng);
+          setPlaceNamePreview(rev.placeName);
+        } catch {
+          setPlaceNamePreview(`${lat.toFixed(2)}°, ${lng.toFixed(2)}°`);
+        }
+      },
+      (err) => {
+        setIsFetchingLocation(false);
+        // Graceful degradation: show subtle notice, reflection authoring & saving continue uninterrupted
+        setLocationNotice(
+          err.code === 1
+            ? 'Location permission denied. Reflection will save smoothly without location.'
+            : 'Could not detect location. Reflection will save without location.'
+        );
+        setLocationOptIn(false);
+        setLocationCoords(null);
+      },
+      { timeout: 8000, enableHighAccuracy: false }
+    );
+  };
 
   const submit = async (textToSend?: string) => {
     const text = (textToSend ?? inputText).trim();
@@ -105,7 +174,7 @@ export const ReflectionWorkspace: React.FC<ReflectionWorkspaceProps> = ({
 
   const finalize = async () => {
     setFinalizeError(null);
-    const result = await onFinalize();
+    const result = await onFinalize(locationOptIn ? locationCoords : null);
     if (!result.ok) setFinalizeError(result.error ?? 'Could not save this reflection.');
   };
 
@@ -177,6 +246,36 @@ export const ReflectionWorkspace: React.FC<ReflectionWorkspaceProps> = ({
         </div>
 
         <div className="flex items-center space-x-2">
+          {!isFinalized && (
+            <button
+              onClick={handleToggleLocation}
+              disabled={isSending || isFinalizing || isFetchingLocation}
+              className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer border ${
+                locationOptIn && locationCoords
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                  : 'bg-[#FAF8F5] hover:bg-[#EFECE6] text-[#7D756D] border-[#DCD3C6]'
+              }`}
+              title={
+                locationOptIn
+                  ? 'Location attached (~1.1km precision) — click to remove'
+                  : 'Attach location (opt-in)'
+              }
+            >
+              {isFetchingLocation ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#5A5A40]" />
+              ) : (
+                <MapPin className={`w-3.5 h-3.5 ${locationOptIn ? 'text-emerald-600' : 'text-[#7D756D]'}`} />
+              )}
+              <span className="truncate max-w-[130px]">
+                {isFetchingLocation
+                  ? 'Detecting…'
+                  : locationOptIn && locationCoords
+                  ? placeNamePreview || `${locationCoords.lat}°, ${locationCoords.lng}°`
+                  : 'Add Location'}
+              </span>
+            </button>
+          )}
+
           <button
             onClick={() => onRequestDelete(session)}
             disabled={isSending || isFinalizing}
@@ -202,6 +301,22 @@ export const ReflectionWorkspace: React.FC<ReflectionWorkspaceProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Location notice banner for graceful degradation */}
+      {locationNotice && (
+        <div className="px-6 py-2 bg-amber-50 border-b border-amber-200 flex items-center justify-between gap-3 text-xs text-amber-800 animate-fadeIn">
+          <div className="flex items-center space-x-2">
+            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>{locationNotice}</span>
+          </div>
+          <button
+            onClick={() => setLocationNotice(null)}
+            className="text-[11px] text-amber-700 hover:text-amber-900 font-semibold cursor-pointer"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Save / finalize failures, with a retry that does not lose anything */}
       {(sendError || finalizeError) && (
@@ -340,6 +455,20 @@ export const ReflectionWorkspace: React.FC<ReflectionWorkspaceProps> = ({
             </div>
             <p className="text-xs text-[#4A443F] leading-relaxed whitespace-pre-wrap">{entry.summary}</p>
             <p className="text-[11px] text-[#7D756D] italic">Why this score: {entry.moodReason}</p>
+
+            {entry.location && (
+              <div className="flex items-center space-x-1.5 text-[11px] text-[#5A5A40] bg-white p-2 rounded-lg border border-[#DCD3C6]">
+                <MapPin className="w-3.5 h-3.5 text-[#5A5A40] shrink-0" />
+                <span className="truncate font-medium">
+                  {entry.location.placeName ||
+                    `${entry.location.lat.toFixed(2)}°, ${entry.location.lng.toFixed(2)}°`}
+                </span>
+                <span className="text-[10px] text-[#8C827A] ml-auto shrink-0">
+                  ~1.1km city-level
+                </span>
+              </div>
+            )}
+
             {entry.tags.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {entry.tags.map((tag) => (

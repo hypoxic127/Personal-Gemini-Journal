@@ -17,6 +17,22 @@ export interface StartedSession extends Partial<TurnResult> {
   session: SessionDoc;
 }
 
+export interface MapsConfig {
+  mapsBrowserApiKey: string | null;
+}
+
+export interface ReverseGeocodeResult {
+  lat: number;
+  lng: number;
+  placeName: string;
+  geohash: string;
+}
+
+export interface ClearLocationsResult {
+  clearedCount: number;
+  success: boolean;
+}
+
 export const journalApi = {
   createSession: (initialMessage?: string) =>
     api.post<StartedSession>('/api/sessions', initialMessage ? { initialMessage } : {}),
@@ -35,7 +51,11 @@ export const journalApi = {
   sendMessage: (sessionId: string, text: string) =>
     api.post<TurnResult>(`/api/sessions/${sessionId}/messages`, { text }),
 
-  finalize: (sessionId: string) => api.post<EntryDoc>(`/api/sessions/${sessionId}/finalize`, {}),
+  finalize: (sessionId: string, location?: { lat: number; lng: number } | null) =>
+    api.post<EntryDoc>(
+      `/api/sessions/${sessionId}/finalize`,
+      location ? { location: { lat: location.lat, lng: location.lng } } : {}
+    ),
 
   getEntry: (entryId: string) => api.get<EntryDoc>(`/api/entries/${entryId}`),
 
@@ -44,6 +64,14 @@ export const journalApi = {
 
   getMoodInsights: (range: '7d' | '30d' | '90d' = '30d') =>
     api.get<import('@journal/shared').MoodInsightResponse>(`/api/insights/mood?range=${range}`),
+
+  getMapsConfig: () => api.get<MapsConfig>('/api/config'),
+
+  reverseGeocode: (lat: number, lng: number) =>
+    api.post<ReverseGeocodeResult>('/api/places/reverse-geocode', { lat, lng }),
+
+  clearLocations: () =>
+    api.post<ClearLocationsResult>('/api/places/clear-locations', {}),
 };
 
 /**

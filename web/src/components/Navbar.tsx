@@ -6,8 +6,8 @@ interface NavbarProps {
   user: User | null;
   role?: 'user' | 'admin';
   entryCount?: number;
-  activeView?: 'workspace' | 'insights';
-  onViewChange?: (view: 'workspace' | 'insights') => void;
+  activeView?: 'workspace' | 'insights' | 'map';
+  onViewChange?: (view: 'workspace' | 'insights' | 'map') => void;
   onSignOut: () => void;
   onNewReflection?: () => void;
   onOpenThreatModal: () => void;
@@ -74,6 +74,16 @@ export const Navbar: React.FC<NavbarProps> = ({
               }`}
             >
               Mood Insights
+            </button>
+            <button
+              onClick={() => onViewChange('map')}
+              className={`px-2.5 sm:px-3 py-1 rounded-lg text-[11px] sm:text-xs font-semibold transition-all cursor-pointer ${
+                activeView === 'map'
+                  ? 'bg-[#5A5A40] text-[#FAF8F5] shadow-2xs'
+                  : 'text-[#7D756D] hover:text-[#4A443F]'
+              }`}
+            >
+              Mood Map
             </button>
           </nav>
         )}

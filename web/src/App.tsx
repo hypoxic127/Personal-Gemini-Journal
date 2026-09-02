@@ -8,6 +8,7 @@ import { ThreatSummaryTable } from './components/ThreatSummaryTable';
 import { ReflectionWorkspace } from './components/ReflectionWorkspace';
 import { EntryHistorySidebar } from './components/EntryHistorySidebar';
 import { MoodDashboard } from './components/MoodDashboard';
+import { MoodMap } from './components/MoodMap';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { describeError, journalApi } from './lib/journalApi';
 
@@ -56,7 +57,7 @@ const DeleteConfirmation: React.FC<{
 const Journal: React.FC<{ onOpenThreatModal: () => void }> = ({ onOpenThreatModal }) => {
   const { user, profile, role, signOut, refreshProfile } = useAuth();
 
-  const [activeView, setActiveView] = useState<'workspace' | 'insights'>('workspace');
+  const [activeView, setActiveView] = useState<'workspace' | 'insights' | 'map'>('workspace');
   const [sessions, setSessions] = useState<SessionDoc[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [isLoadingSessions, setIsLoadingSessions] = useState(true);
@@ -174,29 +175,32 @@ const Journal: React.FC<{ onOpenThreatModal: () => void }> = ({ onOpenThreatModa
     [activeSession, upsertSession]
   );
 
-  const finalize = useCallback(async (): Promise<{ ok: boolean; error?: string }> => {
-    if (!activeSession) return { ok: false, error: 'No reflection is open.' };
-    setIsFinalizing(true);
-    try {
-      const saved = await journalApi.finalize(activeSession.id);
-      setEntry(saved);
-      const updated: SessionDoc = {
-        ...activeSession,
-        status: 'finalized',
-        entryId: saved.id,
-        title: saved.title,
-        updatedAt: new Date().toISOString(),
-      };
-      setActiveSession(updated);
-      upsertSession(updated);
-      void refreshProfile();
-      return { ok: true };
-    } catch (err) {
-      return { ok: false, error: describeError(err, 'Could not save this reflection as an entry.') };
-    } finally {
-      setIsFinalizing(false);
-    }
-  }, [activeSession, refreshProfile, upsertSession]);
+  const finalize = useCallback(
+    async (location?: { lat: number; lng: number } | null): Promise<{ ok: boolean; error?: string }> => {
+      if (!activeSession) return { ok: false, error: 'No reflection is open.' };
+      setIsFinalizing(true);
+      try {
+        const saved = await journalApi.finalize(activeSession.id, location);
+        setEntry(saved);
+        const updated: SessionDoc = {
+          ...activeSession,
+          status: 'finalized',
+          entryId: saved.id,
+          title: saved.title,
+          updatedAt: new Date().toISOString(),
+        };
+        setActiveSession(updated);
+        upsertSession(updated);
+        void refreshProfile();
+        return { ok: true };
+      } catch (err) {
+        return { ok: false, error: describeError(err, 'Could not save this reflection as an entry.') };
+      } finally {
+        setIsFinalizing(false);
+      }
+    },
+    [activeSession, refreshProfile, upsertSession]
+  );
 
   const confirmDelete = useCallback(async () => {
     if (!deleteTarget) return;
@@ -241,6 +245,22 @@ const Journal: React.FC<{ onOpenThreatModal: () => void }> = ({ onOpenThreatModa
             onStartReflection={() => {
               setActiveView('workspace');
               void startNew();
+            }}
+          />
+        </ErrorBoundary>
+      ) : activeView === 'map' ? (
+        <ErrorBoundary>
+          <MoodMap
+            onStartReflection={() => {
+              setActiveView('workspace');
+              void startNew();
+            }}
+            onOpenSession={(sessionId) => {
+              const target = sessions.find((s) => s.id === sessionId);
+              if (target) {
+                setActiveView('workspace');
+                void openSession(target);
+              }
             }}
           />
         </ErrorBoundary>

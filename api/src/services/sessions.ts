@@ -3,6 +3,7 @@ import {
   MAX_PAGE_SIZE,
   type EntryDoc,
   type GeminiFinalizeOutput,
+  type LocationData,
   type MessageDoc,
   type Page,
   type SessionDoc,
@@ -10,6 +11,7 @@ import {
 import { db, FieldValue } from '../firebase.js';
 import { stripUndefined } from '../lib/sanitize.js';
 import { AppError } from '../lib/errors.js';
+import { logAuditEvent } from './audit.js';
 
 /**
  * Every path in this file is built from the `uid` argument, which callers take from the
@@ -268,7 +270,8 @@ export async function finalizeSession(
   uid: string,
   sessionId: string,
   draft: GeminiFinalizeOutput,
-  model: string
+  model: string,
+  location: LocationData | null = null
 ): Promise<EntryDoc> {
   const sessionRef = sessionsCol(uid).doc(sessionId);
   const entryRef = entriesCol(uid).doc();
@@ -293,7 +296,7 @@ export async function finalizeSession(
         moodScore: draft.moodScore,
         moodReason: draft.moodReason,
         tags: draft.tags,
-        location: null, // M4 adds opt-in location; the field exists so the shape never changes.
+        location: location ?? null,
         model,
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
@@ -315,10 +318,59 @@ export async function finalizeSession(
     id: entryRef.id,
     sessionId,
     ...draft,
-    location: null,
+    location: location ?? null,
     createdAt: now,
     updatedAt: now,
   };
+}
+
+/**
+ * Bulk clear all location data across historical entries belonging to the user.
+ * Performs bounded batched updates and logs an immutable audit event.
+ */
+export async function clearUserLocations(uid: string): Promise<number> {
+  const entriesRef = entriesCol(uid);
+  const snapshot = await entriesRef.get();
+
+  if (snapshot.empty) {
+    await logAuditEvent({
+      actorUid: uid,
+      action: 'LOCATION_BULK_CLEAR',
+      targetUid: uid,
+      meta: { clearedCount: 0 },
+    });
+    return 0;
+  }
+
+  const docsToUpdate = snapshot.docs.filter((doc) => {
+    const loc = doc.data().location;
+    return loc !== null && loc !== undefined;
+  });
+
+  const BATCH_SIZE = 500;
+  let clearedCount = 0;
+
+  for (let i = 0; i < docsToUpdate.length; i += BATCH_SIZE) {
+    const chunk = docsToUpdate.slice(i, i + BATCH_SIZE);
+    const batch = db.batch();
+    for (const doc of chunk) {
+      batch.update(doc.ref, {
+        location: null,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      clearedCount++;
+    }
+    await batch.commit();
+  }
+
+  await logAuditEvent({
+    actorUid: uid,
+    action: 'LOCATION_BULK_CLEAR',
+    targetUid: uid,
+    meta: { clearedCount },
+  });
+
+  return clearedCount;
 }
 
 // --------------------------------------------------------------------------------------
