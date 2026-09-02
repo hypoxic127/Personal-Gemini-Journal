@@ -37,8 +37,8 @@ const RECOVERABLE_STATUSES = new Set([503, 429, 404, 500]);
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_BACKOFF_BASE_MS = 400;
 
-const CHAT_MAX_OUTPUT_TOKENS = 800;
-const FINALIZE_MAX_OUTPUT_TOKENS = 900;
+const CHAT_MAX_OUTPUT_TOKENS = 2048;
+const FINALIZE_MAX_OUTPUT_TOKENS = 2048;
 
 let client: GoogleGenAI | undefined;
 
@@ -75,9 +75,16 @@ const backoffWithJitter = (attempt: number, base: number): number =>
 
 const statusOf = (err: unknown): number | undefined => {
   if (typeof err !== 'object' || err === null) return undefined;
-  const e = err as { status?: unknown; code?: unknown };
+  const e = err as { status?: unknown; code?: unknown; error?: { code?: unknown; status?: unknown } };
   if (typeof e.status === 'number') return e.status;
   if (typeof e.code === 'number') return e.code;
+  if (typeof e.error?.code === 'number') return e.error.code;
+  if (typeof e.status === 'string' && /^\d+$/.test(e.status)) return parseInt(e.status, 10);
+  if (typeof e.code === 'string' && /^\d+$/.test(e.code)) return parseInt(e.code, 10);
+  if (err instanceof Error && err.message) {
+    const match = err.message.match(/\b(400|401|403|404|429|500|502|503|504)\b/);
+    if (match) return parseInt(match[1]!, 10);
+  }
   return undefined;
 };
 
@@ -140,9 +147,10 @@ export async function generateContentWithFallback(
       const status = statusOf(err);
       const timedOut = err instanceof AttemptTimeoutError || controller.signal.aborted;
 
-      // A timeout is this rung being unavailable, so it falls through like a 503. Any other
-      // non-recoverable status is a request-level fault and is raised immediately.
-      if (!timedOut && (status === undefined || !RECOVERABLE_STATUSES.has(status))) {
+      const FATAL_STATUSES = new Set([400, 401, 403, 422]);
+      const isFatal = !timedOut && status !== undefined && FATAL_STATUSES.has(status);
+
+      if (isFatal) {
         console.error(
           JSON.stringify({
             timestamp: new Date().toISOString(),
@@ -151,6 +159,7 @@ export async function generateContentWithFallback(
             model,
             rung: i,
             status,
+            errorMessage: err instanceof Error ? err.message : String(err),
           })
         );
         throw new AppError(
@@ -170,6 +179,7 @@ export async function generateContentWithFallback(
           rung: i,
           status,
           timedOut,
+          errorMessage: err instanceof Error ? err.message : String(err),
         })
       );
 
@@ -336,16 +346,23 @@ export function normalizeFinalizeOutput(raw: unknown): GeminiFinalizeOutput {
   if (typeof candidate.moodScore === 'number' && Number.isFinite(candidate.moodScore)) {
     repaired.moodScore = clamp(candidate.moodScore, -5, 5);
   }
-  if (typeof candidate.title === 'string') repaired.title = candidate.title.trim().slice(0, 60);
-  if (typeof candidate.summary === 'string') repaired.summary = candidate.summary.trim().slice(0, 1200);
-  if (typeof candidate.moodReason === 'string') {
-    repaired.moodReason = candidate.moodReason.trim().slice(0, 300);
+
+  if (typeof candidate.title === 'string') {
+    repaired.title = candidate.title.slice(0, 60);
   }
+
+  if (typeof candidate.summary === 'string') {
+    repaired.summary = candidate.summary.slice(0, 1200);
+  }
+
+  if (typeof candidate.moodReason === 'string') {
+    repaired.moodReason = candidate.moodReason.slice(0, 300);
+  }
+
   if (Array.isArray(candidate.tags)) {
     repaired.tags = candidate.tags
       .filter((tag): tag is string => typeof tag === 'string')
-      .map((tag) => tag.trim().slice(0, 20))
-      .filter((tag) => tag.length > 0)
+      .map((tag) => tag.slice(0, 20))
       .slice(0, 5);
   }
 
@@ -390,6 +407,16 @@ export async function generateChatReply(args: {
   return { text, model };
 }
 
+const extractJsonObject = (text: string): string => {
+  const trimmed = text.trim();
+  const firstBrace = trimmed.indexOf('{');
+  const lastBrace = trimmed.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    return trimmed.slice(firstBrace, lastBrace + 1);
+  }
+  return trimmed;
+};
+
 export async function generateEntryDraft(args: {
   turns: ChatTurnInput[];
   correlationId?: string;
@@ -398,10 +425,19 @@ export async function generateEntryDraft(args: {
     correlationId: args.correlationId,
   });
 
+  const rawText = extractJsonObject(response.text ?? '');
   let parsedJson: unknown;
   try {
-    parsedJson = JSON.parse(response.text ?? '');
-  } catch {
+    parsedJson = JSON.parse(rawText);
+  } catch (err) {
+    console.error(
+      JSON.stringify({
+        timestamp: new Date().toISOString(),
+        event: 'AI_FINALIZE_JSON_PARSE_FAILED',
+        rawText,
+        error: err instanceof Error ? err.message : String(err),
+      })
+    );
     throw new AppError(502, 'AI_INVALID_OUTPUT', 'The reflection service returned an unusable result.');
   }
 
