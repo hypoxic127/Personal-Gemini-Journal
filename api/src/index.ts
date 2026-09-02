@@ -46,6 +46,7 @@ app.use(
       },
     },
     crossOriginEmbedderPolicy: false,
+    crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
   })
 );
 

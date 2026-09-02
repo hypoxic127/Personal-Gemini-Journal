@@ -140,6 +140,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setAuthError(
           'Firebase Authentication 尚未在控制台启用。请在 Firebase Console -> Authentication -> Sign-in method 中开启 Google 登录提供商并保存。'
         );
+      } else if (err.code === 'auth/popup-blocked') {
+        setAuthError('浏览器拦截了 Google 登录弹窗，请在地址栏右侧允许该站点的弹出式窗口后重试。');
+      } else if (err.code === 'auth/network-request-failed') {
+        setAuthError('网络连接失败，请确认网络代理或开启 TUN 全局模式以连接 accounts.google.com 与 firebaseapp.com。');
       } else if (err.code !== 'auth/popup-closed-by-user') {
         setAuthError(err.message || 'Sign in failed. Please try again.');
       }
