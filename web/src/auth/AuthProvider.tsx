@@ -136,7 +136,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await signInWithPopup(authInstance, googleProvider);
     } catch (err: any) {
       console.error('Google Sign-In error:', err);
-      if (err.code !== 'auth/popup-closed-by-user') {
+      if (err.code === 'auth/configuration-not-found') {
+        setAuthError(
+          'Firebase Authentication 尚未在控制台启用。请在 Firebase Console -> Authentication -> Sign-in method 中开启 Google 登录提供商并保存。'
+        );
+      } else if (err.code !== 'auth/popup-closed-by-user') {
         setAuthError(err.message || 'Sign in failed. Please try again.');
       }
     } finally {
