@@ -354,6 +354,7 @@ gcloud run services describe "$SERVICE" --region="$REGION" \
 
 ```
 README.md            this file — architecture, security, deployment, verification
+TESTING.md           user interaction & walkthrough test catalogue (§6 mandated deliverable)
 AGENTS.md            security constitution (shared with Antigravity and AI Studio)
 CLAUDE.md            Claude Code specifics; defers to AGENTS.md
 firestore.rules      last line of defense, written as if the backend did not exist
