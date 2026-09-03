@@ -340,12 +340,13 @@ curl -s -o /dev/null -w "%{http_code}\n" "$URL/api/config"          # 401 — Ma
 curl -s "$URL/api/config/public"                                    # Firebase identifier only, never a Maps key
 grep -rc "AIza" web/dist/ | grep -v ':0$' || echo "0 — no key in the bundle"
 gcloud run services describe "$SERVICE" --region="$REGION" \
-  --format="value(metadata.labels)"                                 # dev-tutorial=...
+  --format="value(metadata.labels)"                                 # dev-tutorial=cloud-run-ai-challenge
 gcloud run services describe "$SERVICE" --region="$REGION" \
-  --format="value(status.latestReadyRevisionName)"                  # journal-app-00010-jpc
+  --format="value(status.latestReadyRevisionName)"                  # journal-app-00011-n4v
 ```
 
 ![Cloud Run Production Verification Evidence](docs/evidence/terminal-verification.png)
+![Cloud Run Required Challenge Labels Verification](docs/evidence/labels-verification.png)
 
 ---
 
