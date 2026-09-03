@@ -73,6 +73,13 @@ const STARTER_PROMPTS: StarterPrompt[] = [
   },
 ];
 
+const formatMessageTime = (isoString: string): string => {
+  const date = new Date(isoString);
+  return Number.isNaN(date.getTime())
+    ? ''
+    : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
+
 export const ReflectionWorkspace: React.FC<ReflectionWorkspaceProps> = ({
   session,
   messages,
@@ -101,13 +108,19 @@ export const ReflectionWorkspace: React.FC<ReflectionWorkspaceProps> = ({
 
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const activeSessionIdRef = useRef(session?.id);
+  activeSessionIdRef.current = session?.id;
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isSending]);
 
-  // Reset location capture state when session changes
+  // Reset composer & location capture state when session changes
   useEffect(() => {
+    setInputText('');
+    setSendError(null);
+    setPendingText(null);
     setLocationOptIn(false);
     setLocationCoords(null);
     setPlaceNamePreview(null);
@@ -171,23 +184,40 @@ export const ReflectionWorkspace: React.FC<ReflectionWorkspaceProps> = ({
 
   const submit = async (textToSend?: string) => {
     const text = (textToSend ?? inputText).trim();
-    if (!text || isSending || !session || isFinalized) return;
+    if (!text || isSending || submittingRef.current || !session || isFinalized) return;
 
+    const currentSessionId = session.id;
+    submittingRef.current = true;
     setSendError(null);
-    const result = await onSend(text);
+    const previousInput = inputText;
 
-    if (result.ok) {
-      // Cleared only now — after a confirmed write.
+    // Clear input if sending the current textarea content or an explicit retry matching current input
+    if (!textToSend || previousInput.trim() === text) {
       setInputText('');
-      setPendingText(null);
-    } else {
-      // The words stay in the box. Losing someone's writing to a transient failure is the
-      // worst thing this app can do, so nothing is cleared and Retry re-sends the same text.
-      setPendingText(text);
-      setInputText((current) => (current.trim().length > 0 ? current : text));
-      setSendError(result.error ?? 'Could not save your message.');
     }
-    setTimeout(() => inputRef.current?.focus(), 50);
+
+    try {
+      const result = await onSend(text);
+
+      // Guard against session switches mid-flight
+      if (activeSessionIdRef.current !== currentSessionId) return;
+
+      if (result.ok) {
+        setPendingText(null);
+        if (inputText.trim() === text) {
+          setInputText('');
+        }
+      } else {
+        // The words stay in the box. Losing someone's writing to a transient failure is the
+        // worst thing this app can do, so text is restored on write failure and Retry re-sends the same text.
+        setPendingText(text);
+        setInputText(textToSend && previousInput.trim() !== text ? previousInput : text);
+        setSendError(result.error ?? 'Could not save your message.');
+      }
+    } finally {
+      submittingRef.current = false;
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
   };
 
   const finalize = async () => {
@@ -207,6 +237,7 @@ export const ReflectionWorkspace: React.FC<ReflectionWorkspaceProps> = ({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.nativeEvent.isComposing) return;
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       void submit();
@@ -344,7 +375,7 @@ export const ReflectionWorkspace: React.FC<ReflectionWorkspaceProps> = ({
             <span>{sendError ?? finalizeError}</span>
           </div>
           <button
-            onClick={() => (sendError ? void submit(pendingText ?? inputText) : void finalize())}
+            onClick={() => (sendError ? void submit(inputText.trim() || (pendingText ?? '')) : void finalize())}
             disabled={isSending || isFinalizing}
             className="px-2.5 py-1 bg-rose-600 text-white rounded font-medium hover:bg-rose-700 transition-colors disabled:opacity-50 shrink-0 inline-flex items-center space-x-1.5 cursor-pointer"
           >
@@ -407,17 +438,20 @@ export const ReflectionWorkspace: React.FC<ReflectionWorkspaceProps> = ({
         ) : (
           messages.map((message) => {
             const isUser = message.role === 'user';
+            const isOptimistic = message.id.startsWith('optimistic-');
             return (
-              <div key={message.id} className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
+              <div
+                key={message.id}
+                className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} ${
+                  isOptimistic ? 'animate-fadeIn' : ''
+                }`}
+              >
                 <div className="flex items-center space-x-2 mb-1.5 px-1">
                   <span className="text-[11px] font-bold text-[#7D756D]">
                     {isUser ? 'You' : 'Companion'}
                   </span>
                   <span className="text-[10px] text-[#A3988E]">
-                    {new Date(message.createdAt).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
+                    {isOptimistic ? 'Sending…' : formatMessageTime(message.createdAt)}
                   </span>
                 </div>
 
@@ -426,7 +460,7 @@ export const ReflectionWorkspace: React.FC<ReflectionWorkspaceProps> = ({
                     isUser
                       ? 'bg-[#5A5A40] text-[#FAF8F5] rounded-tr-none'
                       : 'bg-white text-[#4A443F] border border-[#E2DDD5] rounded-tl-none'
-                  }`}
+                  } ${isOptimistic ? 'opacity-90' : ''}`}
                 >
                   {isUser ? (
                     <p className="whitespace-pre-wrap">{message.text}</p>
@@ -434,16 +468,18 @@ export const ReflectionWorkspace: React.FC<ReflectionWorkspaceProps> = ({
                     <SafeMarkdown text={message.text} />
                   )}
 
-                  <button
-                    onClick={() => void copy(message)}
-                    className={`absolute bottom-2 right-2 p-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity ${
-                      isUser ? 'hover:bg-[#484833] text-[#DCD3C6]' : 'hover:bg-[#EAE5DD] text-[#7D756D]'
-                    }`}
-                    title="Copy text"
-                    aria-label="Copy message text"
-                  >
-                    {copiedId === message.id ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                  </button>
+                  {!isOptimistic && (
+                    <button
+                      onClick={() => void copy(message)}
+                      className={`absolute bottom-2 right-2 p-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity ${
+                        isUser ? 'hover:bg-[#484833] text-[#DCD3C6]' : 'hover:bg-[#EAE5DD] text-[#7D756D]'
+                      }`}
+                      title="Copy text"
+                      aria-label="Copy message text"
+                    >
+                      {copiedId === message.id ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                  )}
                 </div>
               </div>
             );

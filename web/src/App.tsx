@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, AlertCircle, Trash2, RefreshCw } from 'lucide-react';
 import type { EntryDoc, MessageDoc, SessionDoc } from '@journal/shared';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
@@ -88,12 +88,14 @@ const Journal: React.FC<{ onOpenThreatModal: () => void }> = ({ onOpenThreatModa
   const [sessionsError, setSessionsError] = useState<string | null>(null);
 
   const [activeSession, setActiveSession] = useState<SessionDoc | null>(null);
+  const activeSessionRef = useRef<SessionDoc | null>(null);
+  activeSessionRef.current = activeSession;
   const [messages, setMessages] = useState<MessageDoc[]>([]);
   const [entry, setEntry] = useState<EntryDoc | null>(null);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [messagesError, setMessagesError] = useState<string | null>(null);
-
-  const [isSending, setIsSending] = useState(false);
+  const [sendingSessionId, setSendingSessionId] = useState<string | null>(null);
+  const isSending = Boolean(activeSession && sendingSessionId === activeSession.id);
   const [isFinalizing, setIsFinalizing] = useState(false);
 
   const [deleteTarget, setDeleteTarget] = useState<SessionDoc | null>(null);
@@ -177,22 +179,48 @@ const Journal: React.FC<{ onOpenThreatModal: () => void }> = ({ onOpenThreatModa
   const send = useCallback(
     async (text: string): Promise<{ ok: boolean; error?: string }> => {
       if (!activeSession) return { ok: false, error: 'No reflection is open.' };
-      setIsSending(true);
+      const targetSessionId = activeSession.id;
+      const optimisticId = `optimistic-${Date.now()}`;
+      const optimisticMsg: MessageDoc = {
+        id: optimisticId,
+        role: 'user',
+        text,
+        createdAt: new Date().toISOString(),
+      };
+      setMessages((current) => [...current, optimisticMsg]);
+      setSendingSessionId(targetSessionId);
       try {
-        const turn = await journalApi.sendMessage(activeSession.id, text);
-        setMessages((current) => [...current, turn.userMessage, turn.modelMessage]);
-        const updated = {
-          ...activeSession,
-          messageCount: activeSession.messageCount + 2,
+        const turn = await journalApi.sendMessage(targetSessionId, text);
+        const currentSession =
+          activeSessionRef.current?.id === targetSessionId
+            ? activeSessionRef.current
+            : activeSession;
+        const updated: SessionDoc = {
+          ...currentSession,
+          messageCount: currentSession.messageCount + 2,
           updatedAt: new Date().toISOString(),
         };
-        setActiveSession(updated);
         upsertSession(updated);
+
+        if (activeSessionRef.current?.id === targetSessionId) {
+          setMessages((current) => {
+            const filtered = current.filter((m) => m.id !== optimisticId);
+            const existingIds = new Set(filtered.map((m) => m.id));
+            const toAdd: MessageDoc[] = [];
+            if (!existingIds.has(turn.userMessage.id)) toAdd.push(turn.userMessage);
+            if (!existingIds.has(turn.modelMessage.id)) toAdd.push(turn.modelMessage);
+            return [...filtered, ...toAdd];
+          });
+          setActiveSession(updated);
+        }
         return { ok: true };
       } catch (err) {
+        if (activeSessionRef.current?.id === targetSessionId) {
+          setMessages((current) => current.filter((m) => m.id !== optimisticId));
+        }
         return { ok: false, error: describeError(err, 'Could not save your message.') };
       } finally {
-        setIsSending(false);
+        setSendingSessionId((curr) => (curr === targetSessionId ? null : curr));
       }
     },
     [activeSession, upsertSession]
