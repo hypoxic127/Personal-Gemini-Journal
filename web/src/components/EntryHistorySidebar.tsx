@@ -1,5 +1,16 @@
 import React, { useState } from 'react';
-import { AlertCircle, Calendar, MessageSquare, Plus, Search, Sparkles, Trash2 } from 'lucide-react';
+import {
+  AlertCircle,
+  Calendar,
+  CheckCircle2,
+  MessageSquare,
+  Plus,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  Sparkles,
+  Trash2,
+} from 'lucide-react';
 import type { SessionDoc } from '@journal/shared';
 
 /**
@@ -131,9 +142,10 @@ export const EntryHistorySidebar: React.FC<EntryHistorySidebarProps> = ({
             <p className="text-xs text-[#4A443F] font-semibold">{error}</p>
             <button
               onClick={onRetry}
-              className="mt-3 px-3 py-1.5 bg-[#5A5A40] text-[#FAF8F5] rounded-lg text-xs font-semibold hover:bg-[#484833]"
+              className="mt-3 px-3 py-1.5 bg-[#5A5A40] text-[#FAF8F5] rounded-lg text-xs font-semibold hover:bg-[#484833] inline-flex items-center space-x-1.5 cursor-pointer"
             >
-              Try again
+              <RefreshCw className="w-3.5 h-3.5 shrink-0" />
+              <span>Try again</span>
             </button>
           </div>
         ) : visible.length === 0 ? (
@@ -175,8 +187,9 @@ export const EntryHistorySidebar: React.FC<EntryHistorySidebarProps> = ({
                       {session.title}
                     </h3>
                     {session.status === 'finalized' && (
-                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#EAE5DD] text-[#5A5A40] border border-[#DCD3C6] font-medium shrink-0">
-                        Saved
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#EAE5DD] text-[#5A5A40] border border-[#DCD3C6] font-medium shrink-0 inline-flex items-center space-x-1">
+                        <CheckCircle2 className="w-2.5 h-2.5 text-[#5A5A40] shrink-0" />
+                        <span>Saved</span>
                       </span>
                     )}
                   </div>
@@ -197,7 +210,7 @@ export const EntryHistorySidebar: React.FC<EntryHistorySidebarProps> = ({
                           e.stopPropagation();
                           onRequestDelete(session);
                         }}
-                        className="text-[#A3988E] hover:text-rose-600 hover:bg-rose-50 transition-colors p-1 rounded-md opacity-70 group-hover:opacity-100"
+                        className="text-[#A3988E] hover:text-rose-600 hover:bg-rose-50 transition-colors p-1 rounded-md opacity-70 group-hover:opacity-100 cursor-pointer"
                         title="Delete reflection"
                         aria-label={`Delete ${session.title}`}
                       >
@@ -213,9 +226,16 @@ export const EntryHistorySidebar: React.FC<EntryHistorySidebarProps> = ({
               <button
                 onClick={onLoadMore}
                 disabled={isLoadingMore}
-                className="w-full py-2 text-xs font-semibold text-[#5A5A40] bg-[#EAE5DD] hover:bg-[#DFD8CE] rounded-lg transition-colors disabled:opacity-50"
+                className="w-full py-2 text-xs font-semibold text-[#5A5A40] bg-[#EAE5DD] hover:bg-[#DFD8CE] rounded-lg transition-colors disabled:opacity-50 inline-flex items-center justify-center space-x-1.5 cursor-pointer"
               >
-                {isLoadingMore ? 'Loading…' : 'Load older reflections'}
+                {isLoadingMore ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0" />
+                    <span>Loading…</span>
+                  </>
+                ) : (
+                  <span>Load older reflections</span>
+                )}
               </button>
             )}
           </>
@@ -223,7 +243,7 @@ export const EntryHistorySidebar: React.FC<EntryHistorySidebarProps> = ({
       </div>
 
       <div className="p-3 bg-[#EFECE6] border-t border-[#E2DDD5] text-[11px] text-[#7D756D] flex items-center space-x-2">
-        <div className="w-2 h-2 rounded-full bg-[#5A5A40]" />
+        <ShieldCheck className="w-3.5 h-3.5 text-[#5A5A40] shrink-0" />
         <span className="truncate">Readable only by your account</span>
       </div>
     </aside>

@@ -20,68 +20,8 @@ import {
 } from 'lucide-react';
 import type { EntryDoc, Mood } from '@journal/shared';
 import { journalApi, describeError } from '../lib/journalApi';
-
-const MOOD_THEME: Record<
-  Mood,
-  { label: string; color: string; bg: string; text: string; border: string; emoji: string }
-> = {
-  joyful: {
-    label: 'Joyful / 喜悦',
-    color: '#10B981',
-    bg: 'bg-emerald-50',
-    text: 'text-emerald-800',
-    border: 'border-emerald-200',
-    emoji: '✨',
-  },
-  calm: {
-    label: 'Calm / 平静',
-    color: '#06B6D4',
-    bg: 'bg-cyan-50',
-    text: 'text-cyan-800',
-    border: 'border-cyan-200',
-    emoji: '🌿',
-  },
-  neutral: {
-    label: 'Neutral / 中性',
-    color: '#64748B',
-    bg: 'bg-slate-50',
-    text: 'text-slate-800',
-    border: 'border-slate-200',
-    emoji: '☕',
-  },
-  anxious: {
-    label: 'Anxious / 焦虑',
-    color: '#F59E0B',
-    bg: 'bg-amber-50',
-    text: 'text-amber-800',
-    border: 'border-amber-200',
-    emoji: '⚡',
-  },
-  sad: {
-    label: 'Sad / 低落',
-    color: '#6366F1',
-    bg: 'bg-indigo-50',
-    text: 'text-indigo-800',
-    border: 'border-indigo-200',
-    emoji: '🌧️',
-  },
-  angry: {
-    label: 'Angry / 愤怒',
-    color: '#F43F5E',
-    bg: 'bg-rose-50',
-    text: 'text-rose-800',
-    border: 'border-rose-200',
-    emoji: '🔥',
-  },
-  mixed: {
-    label: 'Mixed / 复杂',
-    color: '#A855F7',
-    bg: 'bg-purple-50',
-    text: 'text-purple-800',
-    border: 'border-purple-200',
-    emoji: '🎭',
-  },
-};
+import { STANDARD_MOODS, getMoodTheme } from '../lib/moodTheme';
+import { MoodBadge } from './MoodBadge';
 
 interface MoodMapProps {
   onStartReflection: () => void;
@@ -134,13 +74,22 @@ export const MoodMap: React.FC<MoodMapProps> = ({ onStartReflection, onOpenSessi
 
   const filteredEntries = useMemo(() => {
     if (selectedMood === 'all') return locationEntries;
-    return locationEntries.filter((e) => e.mood === selectedMood);
+    const targetThemeName = getMoodTheme(selectedMood).name;
+    return locationEntries.filter(
+      (e) => e.mood === selectedMood || getMoodTheme(e.mood).name === targetThemeName
+    );
   }, [locationEntries, selectedMood]);
 
   // If active filter no longer includes selected entry, clear selection
   useEffect(() => {
-    if (selectedMood !== 'all' && selectedEntry && selectedEntry.mood !== selectedMood) {
-      setSelectedEntry(null);
+    if (selectedMood !== 'all' && selectedEntry) {
+      const targetThemeName = getMoodTheme(selectedMood).name;
+      if (
+        selectedEntry.mood !== selectedMood &&
+        getMoodTheme(selectedEntry.mood).name !== targetThemeName
+      ) {
+        setSelectedEntry(null);
+      }
     }
   }, [selectedMood, selectedEntry]);
 
@@ -275,22 +224,27 @@ export const MoodMap: React.FC<MoodMapProps> = ({ onStartReflection, onOpenSessi
         >
           All Moods ({locationEntries.length})
         </button>
-        {(Object.keys(MOOD_THEME) as Mood[]).map((mood) => {
-          const count = locationEntries.filter((e) => e.mood === mood).length;
-          const theme = MOOD_THEME[mood];
-          const isActive = selectedMood === mood;
+        {STANDARD_MOODS.map((mood) => {
+          const theme = getMoodTheme(mood);
+          const count = locationEntries.filter(
+            (e) => e.mood === mood || getMoodTheme(e.mood).name === theme.name
+          ).length;
+          const MoodIcon = theme.icon;
+          const isActive =
+            selectedMood === mood ||
+            (selectedMood !== 'all' && getMoodTheme(selectedMood).name === theme.name);
           return (
             <button
               key={mood}
-              onClick={() => setSelectedMood(mood)}
-              className={`px-2.5 py-1 rounded-full text-xs font-semibold shrink-0 transition-all flex items-center space-x-1 cursor-pointer ${
+              onClick={() => setSelectedMood(isActive ? 'all' : mood)}
+              className={`px-2.5 py-1 rounded-full text-xs font-semibold shrink-0 transition-all flex items-center space-x-1.5 cursor-pointer ${
                 isActive
                   ? `${theme.bg} ${theme.text} border ${theme.border} ring-2 ring-[#5A5A40]/40 font-bold shadow-2xs`
                   : 'bg-[#FAF8F5] text-[#7D756D] border border-[#DCD3C6] hover:text-[#4A443F]'
               }`}
             >
-              <span>{theme.emoji}</span>
-              <span>{theme.label.split(' / ')[0]}</span>
+              <MoodIcon className="w-3.5 h-3.5 shrink-0" />
+              <span>{theme.name}</span>
               <span className="text-[10px] opacity-70">({count})</span>
             </button>
           );
@@ -333,7 +287,6 @@ export const MoodMap: React.FC<MoodMapProps> = ({ onStartReflection, onOpenSessi
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {filteredEntries.map((entry) => {
-                    const theme = MOOD_THEME[entry.mood] ?? MOOD_THEME.neutral;
                     return (
                       <div
                         key={entry.id}
@@ -341,12 +294,7 @@ export const MoodMap: React.FC<MoodMapProps> = ({ onStartReflection, onOpenSessi
                       >
                         <div>
                           <div className="flex items-center justify-between mb-2">
-                            <span
-                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${theme.bg} ${theme.text} border ${theme.border}`}
-                            >
-                              {theme.emoji} {theme.label.split(' / ')[0]} · {entry.moodScore > 0 ? '+' : ''}
-                              {entry.moodScore}
-                            </span>
+                            <MoodBadge mood={entry.mood} score={entry.moodScore} iconSize="w-3 h-3" />
                             <span className="text-[10px] text-[#A3988E]">
                               {new Date(entry.createdAt).toLocaleDateString()}
                             </span>
@@ -412,7 +360,8 @@ export const MoodMap: React.FC<MoodMapProps> = ({ onStartReflection, onOpenSessi
             >
               {filteredEntries.map((entry) => {
                 if (!entry.location) return null;
-                const theme = MOOD_THEME[entry.mood] ?? MOOD_THEME.neutral;
+                const theme = getMoodTheme(entry.mood);
+                const MoodIcon = theme.icon;
                 const isSelected = selectedEntry?.id === entry.id;
 
                 return (
@@ -420,22 +369,34 @@ export const MoodMap: React.FC<MoodMapProps> = ({ onStartReflection, onOpenSessi
                     key={entry.id}
                     position={{ lat: entry.location.lat, lng: entry.location.lng }}
                     onClick={() => setSelectedEntry(entry)}
-                    title={entry.title}
+                    title={`${theme.name} · ${entry.title} (${new Date(entry.createdAt).toLocaleDateString()})`}
                   >
                     <div
-                      className={`relative flex items-center justify-center transition-transform transform hover:scale-125 cursor-pointer ${
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Mood marker: ${theme.name} · ${entry.title}`}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setSelectedEntry(entry);
+                        }
+                      }}
+                      className={`relative flex items-center justify-center transition-transform transform hover:scale-125 cursor-pointer select-none ${
                         isSelected ? 'scale-125 z-20' : 'z-10'
                       }`}
                     >
                       <div
-                        className="w-8 h-8 rounded-full flex items-center justify-center text-sm shadow-md border-2 border-white transition-all"
+                        className={`w-8 h-8 rounded-full flex items-center justify-center text-white shadow-md border-2 border-white transition-all ${
+                          isSelected ? 'ring-2 ring-offset-2 ring-[#5A5A40]' : ''
+                        }`}
                         style={{ backgroundColor: theme.color }}
                       >
-                        <span className="select-none">{theme.emoji}</span>
+                        <MoodIcon className="w-4 h-4 text-white shrink-0" aria-hidden="true" />
                       </div>
                       <div
-                        className="absolute -bottom-1 w-2 h-2 rotate-45 border-r border-b border-white"
+                        className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 rotate-45 border-r border-b border-white"
                         style={{ backgroundColor: theme.color }}
+                        aria-hidden="true"
                       />
                     </div>
                   </AdvancedMarker>
@@ -444,7 +405,6 @@ export const MoodMap: React.FC<MoodMapProps> = ({ onStartReflection, onOpenSessi
 
               {/* InfoWindow for Selected Marker */}
               {selectedEntry && selectedEntry.location && (() => {
-                const selectedTheme = MOOD_THEME[selectedEntry.mood] ?? MOOD_THEME.neutral;
                 return (
                   <InfoWindow
                     position={{
@@ -456,17 +416,7 @@ export const MoodMap: React.FC<MoodMapProps> = ({ onStartReflection, onOpenSessi
                   >
                     <div className="p-2 max-w-xs space-y-2 text-[#4A443F]">
                       <div className="flex items-center justify-between gap-2">
-                        <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            selectedTheme.bg
-                          } ${selectedTheme.text} border ${
-                            selectedTheme.border
-                          }`}
-                        >
-                          {selectedTheme.emoji} {selectedTheme.label.split(' / ')[0]} ·{' '}
-                          {selectedEntry.moodScore > 0 ? '+' : ''}
-                          {selectedEntry.moodScore}
-                        </span>
+                        <MoodBadge mood={selectedEntry.mood} score={selectedEntry.moodScore} iconSize="w-3 h-3" />
                         <span className="text-[10px] text-[#8C827A]">
                           {new Date(selectedEntry.createdAt).toLocaleDateString()}
                         </span>

@@ -72,6 +72,9 @@ describe('Places Routes (M4 Reverse Geocode & Location Privacy Triad API)', () =
 
   afterAll(async () => {
     if (server) {
+      if (typeof server.closeAllConnections === 'function') {
+        server.closeAllConnections();
+      }
       await new Promise((resolve) => server.close(resolve));
     }
   });

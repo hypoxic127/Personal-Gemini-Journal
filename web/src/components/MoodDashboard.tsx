@@ -28,68 +28,8 @@ import {
 } from 'recharts';
 import type { InsightRange, Mood, MoodInsightResponse } from '@journal/shared';
 import { journalApi, describeError } from '../lib/journalApi';
-
-const MOOD_THEME: Record<
-  Mood,
-  { label: string; color: string; bg: string; text: string; border: string; emoji: string }
-> = {
-  joyful: {
-    label: 'Joyful / 喜悦',
-    color: '#10B981',
-    bg: 'bg-emerald-50',
-    text: 'text-emerald-800',
-    border: 'border-emerald-200',
-    emoji: '✨',
-  },
-  calm: {
-    label: 'Calm / 平静',
-    color: '#06B6D4',
-    bg: 'bg-cyan-50',
-    text: 'text-cyan-800',
-    border: 'border-cyan-200',
-    emoji: '🌿',
-  },
-  neutral: {
-    label: 'Neutral / 中性',
-    color: '#64748B',
-    bg: 'bg-slate-50',
-    text: 'text-slate-800',
-    border: 'border-slate-200',
-    emoji: '☕',
-  },
-  anxious: {
-    label: 'Anxious / 焦虑',
-    color: '#F59E0B',
-    bg: 'bg-amber-50',
-    text: 'text-amber-800',
-    border: 'border-amber-200',
-    emoji: '⚡',
-  },
-  sad: {
-    label: 'Sad / 低落',
-    color: '#6366F1',
-    bg: 'bg-indigo-50',
-    text: 'text-indigo-800',
-    border: 'border-indigo-200',
-    emoji: '🌧️',
-  },
-  angry: {
-    label: 'Angry / 愤怒',
-    color: '#F43F5E',
-    bg: 'bg-rose-50',
-    text: 'text-rose-800',
-    border: 'border-rose-200',
-    emoji: '🔥',
-  },
-  mixed: {
-    label: 'Mixed / 复杂',
-    color: '#A855F7',
-    bg: 'bg-purple-50',
-    text: 'text-purple-800',
-    border: 'border-purple-200',
-    emoji: '🎭',
-  },
-};
+import { getMoodTheme } from '../lib/moodTheme';
+import { MoodBadge } from './MoodBadge';
 
 interface MoodDashboardProps {
   onStartReflection: () => void;
@@ -279,12 +219,20 @@ export const MoodDashboard: React.FC<MoodDashboardProps> = ({ onStartReflection 
                 <span className="text-xs font-medium">Dominant State</span>
                 <Smile className="w-4 h-4 text-[#5A5A40]" />
               </div>
-              <div className="flex items-center space-x-2">
-                <span className="text-lg">{(MOOD_THEME[dominantMoodOverall] || MOOD_THEME.neutral).emoji}</span>
-                <span className="text-base font-bold font-serif text-[#4A443F] capitalize">
-                  {dominantMoodOverall}
-                </span>
-              </div>
+              {(() => {
+                const dominantTheme = getMoodTheme(dominantMoodOverall);
+                const DominantIcon = dominantTheme.icon;
+                return (
+                  <div className="flex items-center space-x-2">
+                    <div className={`p-1.5 rounded-lg ${dominantTheme.bg} ${dominantTheme.text} border ${dominantTheme.border}`}>
+                      <DominantIcon className="w-4 h-4 shrink-0" />
+                    </div>
+                    <span className="text-base font-bold font-serif text-[#4A443F] capitalize">
+                      {dominantTheme.name}
+                    </span>
+                  </div>
+                );
+              })()}
               <p className="text-[11px] text-[#8C827A]">
                 Most frequent emotional state
               </p>
@@ -349,14 +297,11 @@ export const MoodDashboard: React.FC<MoodDashboardProps> = ({ onStartReflection 
                         if (!active || !payload || !payload.length) return null;
                         const point = payload[0].payload as MoodInsightResponse['timeline'][0];
                         if (!point) return null;
-                        const theme = MOOD_THEME[point.dominantMood] || MOOD_THEME.neutral;
                         return (
                           <div className="bg-[#FAF8F5] border border-[#DCD3C6] rounded-xl p-3 shadow-lg max-w-xs space-y-2 text-xs">
-                            <div className="flex items-center justify-between border-b border-[#E2DDD5] pb-1.5">
+                            <div className="flex items-center justify-between border-b border-[#E2DDD5] pb-1.5 gap-2">
                               <span className="font-bold text-[#4A443F]">{point.date}</span>
-                              <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${theme.bg} ${theme.text} ${theme.border} border`}>
-                                {theme.emoji} {point.dominantMood}
-                              </span>
+                              <MoodBadge mood={point.dominantMood} iconSize="w-3 h-3" />
                             </div>
                             <div className="space-y-1 text-[11px]">
                               <div className="flex justify-between">
@@ -427,7 +372,7 @@ export const MoodDashboard: React.FC<MoodDashboardProps> = ({ onStartReflection 
                       {data.distribution
                         .filter((d) => d.count > 0)
                         .map((entry) => (
-                          <Cell key={entry.mood} fill={(MOOD_THEME[entry.mood] || MOOD_THEME.neutral).color} />
+                          <Cell key={entry.mood} fill={getMoodTheme(entry.mood).color} />
                         ))}
                     </Pie>
                     <Tooltip
@@ -435,12 +380,14 @@ export const MoodDashboard: React.FC<MoodDashboardProps> = ({ onStartReflection 
                         if (!active || !payload || !payload.length) return null;
                         const item = payload[0].payload as MoodInsightResponse['distribution'][0];
                         if (!item) return null;
-                        const theme = MOOD_THEME[item.mood] || MOOD_THEME.neutral;
+                        const theme = getMoodTheme(item.mood);
+                        const ItemIcon = theme.icon;
                         return (
                           <div className="bg-[#FAF8F5] border border-[#DCD3C6] rounded-xl p-2.5 shadow-lg text-xs space-y-1">
-                            <span className="font-bold text-[#4A443F] capitalize">
-                              {theme.emoji} {item.mood}
-                            </span>
+                            <div className="flex items-center space-x-1.5 font-bold text-[#4A443F] capitalize">
+                              <ItemIcon className="w-3.5 h-3.5 shrink-0" />
+                              <span>{theme.name}</span>
+                            </div>
                             <div className="text-[11px] text-[#7D756D]">
                               {item.count} {item.count === 1 ? 'entry' : 'entries'} ({item.percentage}%)
                             </div>
@@ -451,7 +398,7 @@ export const MoodDashboard: React.FC<MoodDashboardProps> = ({ onStartReflection 
                     <Legend
                       formatter={(val: Mood) => (
                         <span className="text-[10px] text-[#4A443F] capitalize font-medium">
-                          {val}
+                          {getMoodTheme(val).name}
                         </span>
                       )}
                       iconSize={8}
@@ -520,7 +467,6 @@ export const MoodDashboard: React.FC<MoodDashboardProps> = ({ onStartReflection 
 
               <div className="space-y-3 pt-1">
                 {data.highlights.map((entry) => {
-                  const theme = MOOD_THEME[entry.mood] || MOOD_THEME.neutral;
                   const dateObj = new Date(entry.createdAt);
                   const dateLabel = !Number.isNaN(dateObj.getTime())
                     ? dateObj.toLocaleDateString()
@@ -540,11 +486,13 @@ export const MoodDashboard: React.FC<MoodDashboardProps> = ({ onStartReflection 
                             <span>{dateLabel}</span>
                           </span>
                         </div>
-                        <span className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${theme.bg} ${theme.text} ${theme.border} border shrink-0`}>
-                          <span>{theme.emoji}</span>
-                          <span className="capitalize">{entry.mood}</span>
-                          <span>({entry.moodScore > 0 ? `+${entry.moodScore}` : entry.moodScore})</span>
-                        </span>
+                        <MoodBadge
+                          mood={entry.mood}
+                          score={entry.moodScore}
+                          scoreFormat="paren"
+                          iconSize="w-3.5 h-3.5"
+                          className="shrink-0"
+                        />
                       </div>
 
                       {entry.moodReason && (

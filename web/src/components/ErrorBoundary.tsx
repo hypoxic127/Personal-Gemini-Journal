@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
 
 interface Props {
   children: React.ReactNode;
@@ -38,9 +38,10 @@ export class ErrorBoundary extends React.Component<Props, State> {
         </p>
         <button
           onClick={() => window.location.reload()}
-          className="mt-4 px-4 py-2 bg-[#5A5A40] text-[#FAF8F5] rounded-lg text-xs font-semibold hover:bg-[#484833]"
+          className="mt-4 px-4 py-2 bg-[#5A5A40] text-[#FAF8F5] rounded-lg text-xs font-semibold hover:bg-[#484833] transition-colors flex items-center space-x-1.5 cursor-pointer"
         >
-          Reload
+          <RefreshCw className="w-3.5 h-3.5 shrink-0" />
+          <span>Reload Screen</span>
         </button>
       </div>
     );

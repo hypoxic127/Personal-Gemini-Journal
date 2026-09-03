@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "lint": "echo \"Web lint ok\"",
-    "test": "echo \"Web test ok\""
+    "test": "vitest run"
   },
   "dependencies": {
     "@journal/shared": "workspace:*",

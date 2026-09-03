@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, AlertCircle, Trash2, RefreshCw } from 'lucide-react';
 import type { EntryDoc, MessageDoc, SessionDoc } from '@journal/shared';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
 import { Navbar } from './components/Navbar';
@@ -33,22 +33,37 @@ const DeleteConfirmation: React.FC<{
         </div>
       </div>
 
-      {error && <p className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg p-2">{error}</p>}
+      {error && (
+        <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg p-2.5 flex items-start space-x-2">
+          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+          <span>{error}</span>
+        </div>
+      )}
 
       <div className="flex justify-end space-x-2">
         <button
           onClick={onCancel}
           disabled={isDeleting}
-          className="px-3 py-1.5 text-xs font-semibold text-[#4A443F] bg-[#EAE5DD] hover:bg-[#DFD8CE] rounded-lg disabled:opacity-50"
+          className="px-3.5 py-1.5 text-xs font-semibold text-[#4A443F] bg-[#EAE5DD] hover:bg-[#DFD8CE] rounded-lg disabled:opacity-50 cursor-pointer"
         >
           Keep it
         </button>
         <button
           onClick={onConfirm}
           disabled={isDeleting}
-          className="px-3 py-1.5 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-lg disabled:opacity-50"
+          className="px-3.5 py-1.5 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-lg disabled:opacity-50 inline-flex items-center space-x-1.5 cursor-pointer shadow-xs"
         >
-          {isDeleting ? 'Deleting…' : 'Delete'}
+          {isDeleting ? (
+            <>
+              <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0" />
+              <span>Deleting…</span>
+            </>
+          ) : (
+            <>
+              <Trash2 className="w-3.5 h-3.5 shrink-0" />
+              <span>Delete</span>
+            </>
+          )}
         </button>
       </div>
     </div>

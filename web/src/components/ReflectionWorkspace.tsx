@@ -1,18 +1,23 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   AlertCircle,
+  Anchor,
   Check,
   CheckCircle2,
   Copy,
   FileText,
+  Heart,
+  HelpCircle,
   MapPin,
   RefreshCw,
   Send,
   Sparkles,
+  Tag,
   Trash2,
 } from 'lucide-react';
 import { MESSAGE_TEXT_LIMIT, type EntryDoc, type MessageDoc, type SessionDoc } from '@journal/shared';
 import { SafeMarkdown } from './SafeMarkdown';
+import { MoodBadge } from './MoodBadge';
 import { journalApi } from '../lib/journalApi';
 
 /**
@@ -39,22 +44,34 @@ export interface ReflectionWorkspaceProps {
   isFinalizing: boolean;
 }
 
-const PROMPT_SUGGESTIONS = [
-  '💭 Reflecting on a challenging decision I need to make...',
-  '🌿 What went well today and why I feel grateful...',
-  '⚡ Working through a bottleneck I keep circling around...',
-  '🌧️ Processing feeling overwhelmed and finding my anchor...',
-];
+interface StarterPrompt {
+  id: string;
+  icon: typeof HelpCircle;
+  text: string;
+}
 
-const MOOD_LABELS: Record<string, string> = {
-  joyful: '😊 Joyful',
-  calm: '🌿 Calm',
-  neutral: '⚖️ Neutral',
-  anxious: '🌧️ Anxious',
-  sad: '💧 Sad',
-  angry: '🔥 Angry',
-  mixed: '🌗 Mixed',
-};
+const STARTER_PROMPTS: StarterPrompt[] = [
+  {
+    id: 'decision',
+    icon: HelpCircle,
+    text: 'Reflecting on a challenging decision I need to make...',
+  },
+  {
+    id: 'gratitude',
+    icon: Heart,
+    text: 'What went well today and why I feel grateful...',
+  },
+  {
+    id: 'bottleneck',
+    icon: Sparkles,
+    text: 'Working through a bottleneck I keep circling around...',
+  },
+  {
+    id: 'anchor',
+    icon: Anchor,
+    text: 'Processing feeling overwhelmed and finding my anchor...',
+  },
+];
 
 export const ReflectionWorkspace: React.FC<ReflectionWorkspaceProps> = ({
   session,
@@ -329,9 +346,10 @@ export const ReflectionWorkspace: React.FC<ReflectionWorkspaceProps> = ({
           <button
             onClick={() => (sendError ? void submit(pendingText ?? inputText) : void finalize())}
             disabled={isSending || isFinalizing}
-            className="px-2.5 py-1 bg-rose-600 text-white rounded font-medium hover:bg-rose-700 transition-colors disabled:opacity-50 shrink-0"
+            className="px-2.5 py-1 bg-rose-600 text-white rounded font-medium hover:bg-rose-700 transition-colors disabled:opacity-50 shrink-0 inline-flex items-center space-x-1.5 cursor-pointer"
           >
-            Retry save
+            <RefreshCw className="w-3 h-3 shrink-0" />
+            <span>Retry save</span>
           </button>
         </div>
       )}
@@ -368,16 +386,22 @@ export const ReflectionWorkspace: React.FC<ReflectionWorkspaceProps> = ({
               <span className="text-[11px] font-semibold text-[#8C827A] uppercase tracking-wider block mb-1">
                 Suggested openers
               </span>
-              {PROMPT_SUGGESTIONS.map((suggestion) => (
-                <button
-                  key={suggestion}
-                  onClick={() => void submit(suggestion)}
-                  disabled={isSending}
-                  className="w-full p-2.5 rounded-xl bg-white hover:bg-[#EFECE6] border border-[#E2DDD5] text-xs text-[#4A443F] transition-all text-left block disabled:opacity-50"
-                >
-                  {suggestion}
-                </button>
-              ))}
+              {STARTER_PROMPTS.map((prompt) => {
+                const Icon = prompt.icon;
+                return (
+                  <button
+                    key={prompt.id}
+                    onClick={() => void submit(prompt.text)}
+                    disabled={isSending}
+                    className="w-full p-2.5 rounded-xl bg-white hover:bg-[#EFECE6] border border-[#E2DDD5] text-xs text-[#4A443F] transition-all text-left flex items-center space-x-2.5 disabled:opacity-50 cursor-pointer group"
+                  >
+                    <div className="w-6 h-6 rounded-lg bg-[#FAF8F5] group-hover:bg-[#EAE5DD] border border-[#E2DDD5] flex items-center justify-center text-[#5A5A40] shrink-0 transition-colors">
+                      <Icon className="w-3.5 h-3.5" />
+                    </div>
+                    <span className="flex-1">{prompt.text}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         ) : (
@@ -449,10 +473,7 @@ export const ReflectionWorkspace: React.FC<ReflectionWorkspaceProps> = ({
           <div className="rounded-2xl border border-[#DCD3C6] bg-[#EFECE6] p-5 space-y-3">
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-sm font-bold font-serif text-[#4A443F]">{entry.title}</h3>
-              <span className="text-[11px] px-2 py-0.5 rounded-full bg-white border border-[#DCD3C6] text-[#5A5A40] font-semibold shrink-0">
-                {MOOD_LABELS[entry.mood] ?? entry.mood} · {entry.moodScore > 0 ? '+' : ''}
-                {entry.moodScore}
-              </span>
+              <MoodBadge mood={entry.mood} score={entry.moodScore} className="text-[11px] px-2.5 py-0.5" />
             </div>
             <p className="text-xs text-[#4A443F] leading-relaxed whitespace-pre-wrap">{entry.summary}</p>
             <p className="text-[11px] text-[#7D756D] italic">Why this score: {entry.moodReason}</p>
@@ -475,9 +496,10 @@ export const ReflectionWorkspace: React.FC<ReflectionWorkspaceProps> = ({
                 {entry.tags.map((tag) => (
                   <span
                     key={tag}
-                    className="text-[10px] px-2 py-0.5 rounded-full bg-white border border-[#DCD3C6] text-[#7D756D]"
+                    className="inline-flex items-center space-x-1 text-[10px] px-2 py-0.5 rounded-full bg-white border border-[#DCD3C6] text-[#7D756D]"
                   >
-                    {tag}
+                    <Tag className="w-2.5 h-2.5 text-[#7D756D] shrink-0" />
+                    <span>{tag}</span>
                   </span>
                 ))}
               </div>

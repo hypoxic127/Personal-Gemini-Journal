@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShieldCheck, Lock, Cpu, Database, AlertTriangle } from 'lucide-react';
+import { ShieldCheck, Lock, Cpu, Database, AlertTriangle, CheckCircle2, X } from 'lucide-react';
 import type { ThreatZoneRisk } from '../types';
 
 export const THREAT_MODEL_DATA: ThreatZoneRisk[] = [
@@ -67,9 +67,11 @@ export const ThreatSummaryTable: React.FC<ThreatSummaryTableProps> = ({ isOpen, 
           <button
             id="close-threat-model-btn"
             onClick={onClose}
-            className="text-[#7D756D] hover:text-[#4A443F] p-2 rounded-lg hover:bg-[#DFD8CE] transition-colors text-sm font-medium cursor-pointer"
+            className="text-[#7D756D] hover:text-[#4A443F] px-3 py-1.5 rounded-lg hover:bg-[#DFD8CE] transition-colors text-xs font-semibold flex items-center space-x-1.5 cursor-pointer"
+            aria-label="Close modal"
           >
-            ✕ Close
+            <X className="w-4 h-4" />
+            <span>Close</span>
           </button>
         </div>
 
@@ -127,8 +129,9 @@ export const ThreatSummaryTable: React.FC<ThreatSummaryTableProps> = ({ isOpen, 
                     </td>
                     <td className="py-3.5 px-4 text-[#4A443F] leading-relaxed">{item.countermeasure}</td>
                     <td className="py-3.5 px-4">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#EAE5DD] text-[#5A5A40] border border-[#DCD3C6]">
-                        {item.status}
+                      <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#EAE5DD] text-[#5A5A40] border border-[#DCD3C6]">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                        <span>{item.status}</span>
                       </span>
                     </td>
                   </tr>

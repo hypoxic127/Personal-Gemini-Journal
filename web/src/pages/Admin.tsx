@@ -21,6 +21,7 @@ import {
   EyeOff,
   History,
   Info,
+  X,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -43,68 +44,7 @@ import {
   type AdminStatsResponse,
   type AdminUserSummary,
 } from '../lib/adminApi';
-
-const MOOD_THEME: Record<
-  Mood,
-  { label: string; color: string; bg: string; text: string; border: string; emoji: string }
-> = {
-  joyful: {
-    label: 'Joyful / 喜悦',
-    color: '#10B981',
-    bg: 'bg-emerald-50',
-    text: 'text-emerald-800',
-    border: 'border-emerald-200',
-    emoji: '✨',
-  },
-  calm: {
-    label: 'Calm / 平静',
-    color: '#06B6D4',
-    bg: 'bg-cyan-50',
-    text: 'text-cyan-800',
-    border: 'border-cyan-200',
-    emoji: '🌿',
-  },
-  neutral: {
-    label: 'Neutral / 中性',
-    color: '#64748B',
-    bg: 'bg-slate-50',
-    text: 'text-slate-800',
-    border: 'border-slate-200',
-    emoji: '☕',
-  },
-  anxious: {
-    label: 'Anxious / 焦虑',
-    color: '#F59E0B',
-    bg: 'bg-amber-50',
-    text: 'text-amber-800',
-    border: 'border-amber-200',
-    emoji: '⚡',
-  },
-  sad: {
-    label: 'Sad / 低落',
-    color: '#6366F1',
-    bg: 'bg-indigo-50',
-    text: 'text-indigo-800',
-    border: 'border-indigo-200',
-    emoji: '🌧️',
-  },
-  angry: {
-    label: 'Angry / 愤怒',
-    color: '#F43F5E',
-    bg: 'bg-rose-50',
-    text: 'text-rose-800',
-    border: 'border-rose-200',
-    emoji: '🔥',
-  },
-  mixed: {
-    label: 'Mixed / 复杂',
-    color: '#A855F7',
-    bg: 'bg-purple-50',
-    text: 'text-purple-800',
-    border: 'border-purple-200',
-    emoji: '🎭',
-  },
-};
+import { getMoodTheme } from '../lib/moodTheme';
 
 interface RoleChangeModalProps {
   targetUser: AdminUserSummary | null;
@@ -327,9 +267,10 @@ export const Admin: React.FC<AdminPageProps> = () => {
           </div>
           <button
             onClick={() => setToastMessage(null)}
-            className="text-emerald-700 hover:text-emerald-900 text-xs font-bold px-2 py-0.5 rounded cursor-pointer"
+            className="text-emerald-700 hover:text-emerald-900 p-1 rounded-md hover:bg-emerald-100 transition-colors cursor-pointer"
+            aria-label="Dismiss notification"
           >
-            ✕
+            <X className="w-4 h-4" />
           </button>
         </div>
       )}
@@ -647,7 +588,7 @@ export const Admin: React.FC<AdminPageProps> = () => {
                           {chartDistribution.map((entry) => (
                             <Cell
                               key={entry.mood}
-                              fill={(MOOD_THEME[entry.mood] || MOOD_THEME.neutral).color}
+                              fill={getMoodTheme(entry.mood).color}
                             />
                           ))}
                         </Pie>
@@ -655,16 +596,18 @@ export const Admin: React.FC<AdminPageProps> = () => {
                           content={({ active, payload }) => {
                             if (!active || !payload || !payload.length) return null;
                             const item = payload[0].payload as { mood: Mood; count: number };
-                            const theme = MOOD_THEME[item.mood] || MOOD_THEME.neutral;
+                            const theme = getMoodTheme(item.mood);
+                            const ThemeIcon = theme.icon;
                             const percentage = (
                               (item.count / (stats.totalEntries || 1)) *
                               100
                             ).toFixed(1);
                             return (
                               <div className="bg-[#FAF8F5] border border-[#DCD3C6] rounded-xl p-2.5 shadow-lg text-xs space-y-1">
-                                <span className="font-bold text-[#4A443F] capitalize">
-                                  {theme.emoji} {item.mood}
-                                </span>
+                                <div className="flex items-center space-x-1.5 font-bold text-[#4A443F] capitalize">
+                                  <ThemeIcon className="w-3.5 h-3.5 shrink-0" />
+                                  <span>{theme.name}</span>
+                                </div>
                                 <div className="text-[11px] text-[#7D756D]">
                                   {item.count} reflections ({percentage}%)
                                 </div>
@@ -675,7 +618,7 @@ export const Admin: React.FC<AdminPageProps> = () => {
                         <Legend
                           formatter={(val: Mood) => (
                             <span className="text-[10px] text-[#4A443F] capitalize font-medium">
-                              {val}
+                              {getMoodTheme(val).name}
                             </span>
                           )}
                           iconSize={8}
@@ -708,8 +651,8 @@ export const Admin: React.FC<AdminPageProps> = () => {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
               <div className="bg-[#F5F2ED] border border-[#E2DDD5] rounded-xl p-3 space-y-1">
-                <div className="font-bold text-[#4A443F] flex items-center space-x-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
+                <div className="font-bold text-[#4A443F] flex items-center space-x-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                   <span>Zero Content Disclosure</span>
                 </div>
                 <p className="text-[11px] text-[#7D756D] leading-relaxed">
@@ -719,8 +662,8 @@ export const Admin: React.FC<AdminPageProps> = () => {
               </div>
 
               <div className="bg-[#F5F2ED] border border-[#E2DDD5] rounded-xl p-3 space-y-1">
-                <div className="font-bold text-[#4A443F] flex items-center space-x-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
+                <div className="font-bold text-[#4A443F] flex items-center space-x-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                   <span>Independent Rules Isolation</span>
                 </div>
                 <p className="text-[11px] text-[#7D756D] leading-relaxed">
@@ -730,8 +673,8 @@ export const Admin: React.FC<AdminPageProps> = () => {
               </div>
 
               <div className="bg-[#F5F2ED] border border-[#E2DDD5] rounded-xl p-3 space-y-1">
-                <div className="font-bold text-[#4A443F] flex items-center space-x-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
+                <div className="font-bold text-[#4A443F] flex items-center space-x-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                   <span>Write-Only Audit Logs</span>
                 </div>
                 <p className="text-[11px] text-[#7D756D] leading-relaxed">
@@ -741,8 +684,8 @@ export const Admin: React.FC<AdminPageProps> = () => {
               </div>
 
               <div className="bg-[#F5F2ED] border border-[#E2DDD5] rounded-xl p-3 space-y-1">
-                <div className="font-bold text-[#4A443F] flex items-center space-x-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
+                <div className="font-bold text-[#4A443F] flex items-center space-x-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                   <span>Instant Revocation</span>
                 </div>
                 <p className="text-[11px] text-[#7D756D] leading-relaxed">
@@ -876,6 +819,7 @@ export const Admin: React.FC<AdminPageProps> = () => {
                               </span>
                             ) : (
                               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#EFECE6] text-[#7D756D] border border-[#DCD3C6]">
+                                <UserIcon className="w-3 h-3 mr-1 text-[#7D756D] shrink-0" />
                                 User
                               </span>
                             )}
