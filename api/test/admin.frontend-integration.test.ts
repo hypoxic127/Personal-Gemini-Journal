@@ -119,9 +119,6 @@ describe('Frontend Admin API & Invariant Verification', () => {
         items: [
           {
             uid: 'u_1234567890',
-            email: 'admin@example.com',
-            displayName: 'Admin Lead',
-            photoURL: 'https://example.com/p.jpg',
             role: 'admin',
             createdAt: '2026-09-01T00:00:00.000Z',
             lastActiveAt: '2026-09-02T12:00:00.000Z',
@@ -135,26 +132,38 @@ describe('Frontend Admin API & Invariant Verification', () => {
       expect(parsed.success).toBe(true);
     });
 
-    it('rejects user list with forbidden content fields', () => {
-      const leakyUserList = {
+    it('rejects user list containing PII or forbidden content fields (Zero-PII Invariant)', () => {
+      const leakyPiiList = {
         items: [
           {
             uid: 'u_123',
-            email: 'user@example.com',
-            displayName: 'User',
-            photoURL: null,
+            email: 'user@example.com', // forbidden PII
             role: 'user',
             createdAt: '2026-09-01T00:00:00.000Z',
             lastActiveAt: '2026-09-02T12:00:00.000Z',
             entryCount: 1,
-            summary: 'Private reflection summary', // forbidden
           },
         ],
         nextCursor: null,
       };
 
-      const parsed = AdminUsersResponseSchema.safeParse(leakyUserList);
-      expect(parsed.success).toBe(false);
+      expect(AdminUsersResponseSchema.safeParse(leakyPiiList).success).toBe(false);
+
+      const leakyContentList = {
+        items: [
+          {
+            uid: 'u_123',
+            role: 'user',
+            createdAt: '2026-09-01T00:00:00.000Z',
+            lastActiveAt: '2026-09-02T12:00:00.000Z',
+            entryCount: 1,
+            summary: 'Private reflection summary', // forbidden content
+          },
+        ],
+        nextCursor: null,
+      };
+
+      expect(AdminUsersResponseSchema.safeParse(leakyContentList).success).toBe(false);
     });
 
     it('validates SetUserRoleSchema strictly', () => {

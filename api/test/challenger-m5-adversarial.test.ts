@@ -422,14 +422,11 @@ describe('CHALLENGE AREA 3: Small-Sample Privacy Suppression Boundaries', () => 
   });
 });
 
-describe('CHALLENGE AREA 4: Zero-Content User Metadata & Query Fuzzing', () => {
-  it('ADV-DATA-01: GET /api/admin/users returns strict account metadata with ZERO diary content', async () => {
+describe('CHALLENGE AREA 4: Zero-Content & Zero-PII User Metadata & Query Fuzzing', () => {
+  it('ADV-DATA-01: GET /api/admin/users returns strict account metadata with ZERO PII and ZERO diary content', async () => {
     const mockUsers = [
       {
         uid: 'user_probe_1',
-        email: 'probe1@example.com',
-        displayName: 'Probe 1',
-        photoURL: null,
         role: 'user',
         createdAt: '2026-09-01T00:00:00.000Z',
         lastActiveAt: '2026-09-02T00:00:00.000Z',
@@ -443,13 +440,15 @@ describe('CHALLENGE AREA 4: Zero-Content User Metadata & Query Fuzzing', () => {
     expect(body.data.items).toHaveLength(1);
     const userObj = body.data.items[0];
     expect(userObj.uid).toBe('user_probe_1');
-    expect(userObj.email).toBe('probe1@example.com');
     expect(userObj.entryCount).toBe(15);
     expect(userObj.role).toBe('user');
-    const contentForbidden = [
-      'summary', 'title', 'text', 'content', 'moodReason', 'tags', 'location', 'lat', 'lng', 'placeName', 'geohash', 'sessions', 'messages', 'entries'
+    expect(userObj.createdAt).toBe('2026-09-01T00:00:00.000Z');
+    expect(userObj.lastActiveAt).toBe('2026-09-02T00:00:00.000Z');
+
+    const forbiddenKeys = [
+      'email', 'displayName', 'photoURL', 'summary', 'title', 'text', 'content', 'moodReason', 'tags', 'location', 'lat', 'lng', 'placeName', 'geohash', 'sessions', 'messages', 'entries'
     ];
-    for (const k of contentForbidden) {
+    for (const k of forbiddenKeys) {
       expect(userObj).not.toHaveProperty(k);
     }
   });
@@ -472,8 +471,8 @@ describe('CHALLENGE AREA 4: Zero-Content User Metadata & Query Fuzzing', () => {
   });
 });
 
-describe('CHALLENGE AREA 5: Audit Logging Integrity', () => {
-  it('ADV-AUDIT-01: every privileged action records an immutable audit log entry', async () => {
+describe('CHALLENGE AREA 5: Audit Logging Integrity & De-Noising', () => {
+  it('ADV-AUDIT-01: critical mutations write immutable audit logs while read stats are de-noised to operational logs', async () => {
     aggregatesService.getAdminStats.mockResolvedValueOnce({
       totalEntries: 10,
       activeUsers: 6,
@@ -483,10 +482,8 @@ describe('CHALLENGE AREA 5: Audit Logging Integrity', () => {
       dailyTrend: [],
     });
     await call('/api/admin/stats', { token: 'admin-token' });
-    expect(audit.logAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
-      actorUid: 'admin_caller_1',
-      action: 'admin.stats.view',
-    }));
+    // GET /stats does NOT call logAuditEvent
+    expect(audit.logAuditEvent).not.toHaveBeenCalled();
 
     usersService.listUsers.mockResolvedValueOnce({ items: [], nextCursor: null });
     await call('/api/admin/users', { token: 'admin-token' });
@@ -516,5 +513,40 @@ describe('CHALLENGE AREA 5: Audit Logging Integrity', () => {
       action: 'role.revoke',
       targetUid: 'target_u3',
     }));
+  });
+
+  it('ADV-AUDIT-02: safe fail-closed execution order aborts claim mutation if Firestore display mirror fails', async () => {
+    usersService.updateUserRole.mockRejectedValueOnce(new Error('Firestore write connection timeout'));
+
+    const res = await call('/api/admin/users/target_fail_user/role', {
+      method: 'POST',
+      token: 'admin-token',
+      body: JSON.stringify({ role: 'admin' }),
+    });
+
+    expect(res.status).toBe(500);
+    expect(usersService.updateUserRole).toHaveBeenCalledWith('target_fail_user', 'admin');
+    expect(setCustomUserClaims).not.toHaveBeenCalled();
+    expect(revokeRefreshTokens).not.toHaveBeenCalled();
+    expect(audit.logAuditEvent).not.toHaveBeenCalled();
+  });
+
+  it('ADV-AUDIT-03: rate limiting is enforced on admin endpoints against flood attacks', async () => {
+    aggregatesService.getAdminStats.mockResolvedValue({
+      totalEntries: 5,
+      activeUsers: 5,
+      suppressed: false,
+      moodDistribution: null,
+      averageMoodScore: null,
+      dailyTrend: [],
+    });
+
+    const requests = Array.from({ length: 70 }, () =>
+      call('/api/admin/stats', { token: 'admin-token' })
+    );
+    const results = await Promise.all(requests);
+    const statusCodes = results.map((r) => r.status);
+
+    expect(statusCodes).toContain(429);
   });
 });

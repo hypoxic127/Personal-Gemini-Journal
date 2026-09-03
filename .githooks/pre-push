@@ -18,7 +18,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   fi
 
   printf '\n\033[1mPre-push security check → %s\033[0m\n' "$remote"
-  bash "$(git rev-parse --show-toplevel)/scripts/security-check.sh" "$range" || exit 1
+  bash "$(git rev-parse --show-toplevel)/scripts/security-check.sh" "$range" </dev/null || exit 1
 done
 
 exit 0

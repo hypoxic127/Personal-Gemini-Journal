@@ -297,13 +297,10 @@ describe('M5 Admin RBAC: Role Mutation Validation & Anti-Self-Demotion', () => {
 // =====================================================================================
 
 describe('M5 Admin RBAC: Privacy Guarantee & Zero Content Leakage', () => {
-  it('NEG-ADM-API-10: GET /api/admin/users response returns ZERO journal content, summaries, titles, tags, or locations', async () => {
+  it('NEG-ADM-API-10: GET /api/admin/users response returns ZERO PII and ZERO journal content', async () => {
     const mockUserItems = [
       {
         uid: 'target_u1',
-        email: 'u1@example.com',
-        displayName: 'Target One',
-        photoURL: 'https://example.com/photo.jpg',
         role: 'user',
         createdAt: '2026-09-01T00:00:00.000Z',
         lastActiveAt: '2026-09-02T00:00:00.000Z',
@@ -325,11 +322,16 @@ describe('M5 Admin RBAC: Privacy Guarantee & Zero Content Leakage', () => {
 
     const userItem = body.data.items[0];
     expect(userItem.uid).toBe('target_u1');
-    expect(userItem.email).toBe('u1@example.com');
+    expect(userItem.role).toBe('user');
     expect(userItem.entryCount).toBe(12);
+    expect(userItem.createdAt).toBe('2026-09-01T00:00:00.000Z');
+    expect(userItem.lastActiveAt).toBe('2026-09-02T00:00:00.000Z');
 
-    // Strict structural check: assert zero diary content fields exist in the user object
-    const forbiddenContentFields = [
+    // Strict structural check: assert zero PII and zero diary content fields exist in the user object
+    const forbiddenFields = [
+      'email',
+      'displayName',
+      'photoURL',
       'summary',
       'title',
       'text',
@@ -342,7 +344,7 @@ describe('M5 Admin RBAC: Privacy Guarantee & Zero Content Leakage', () => {
       'placeName',
       'geohash',
     ];
-    for (const forbiddenKey of forbiddenContentFields) {
+    for (const forbiddenKey of forbiddenFields) {
       expect(userItem).not.toHaveProperty(forbiddenKey);
     }
   });
@@ -379,7 +381,7 @@ describe('M5 Admin RBAC: Privacy Guarantee & Zero Content Leakage', () => {
 // =====================================================================================
 
 describe('M5 Admin RBAC: Positive Workflows & Audit Logging', () => {
-  it('POS-ADM-API-01: Admin GET /api/admin/stats returns structured aggregate payload and logs audit entry', async () => {
+  it('POS-ADM-API-01: Admin GET /api/admin/stats returns structured aggregate payload without audit log pollution', async () => {
     const unsuppressedStats = {
       totalEntries: 42,
       activeUsers: 15, // >= 5 active users -> unsuppressed
@@ -413,22 +415,14 @@ describe('M5 Admin RBAC: Positive Workflows & Audit Logging', () => {
     expect(body.data.moodDistribution.joyful).toBe(18);
     expect(body.data.averageMoodScore).toBe(3.6);
 
-    // Audit logging assertion
-    expect(audit.logAuditEvent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        actorUid: 'admin_user_1',
-        action: 'admin.stats.view',
-      })
-    );
+    // De-noised audit trail: GET /stats does NOT call logAuditEvent
+    expect(audit.logAuditEvent).not.toHaveBeenCalled();
   });
 
   it('POS-ADM-API-02: Admin GET /api/admin/users returns paginated user list and logs audit entry', async () => {
     const mockUserItems = [
       {
         uid: 'user_alpha',
-        email: 'alpha@example.com',
-        displayName: 'Alpha',
-        photoURL: null,
         role: 'user',
         createdAt: '2026-09-01T00:00:00.000Z',
         lastActiveAt: '2026-09-02T00:00:00.000Z',
@@ -436,9 +430,6 @@ describe('M5 Admin RBAC: Positive Workflows & Audit Logging', () => {
       },
       {
         uid: 'user_beta',
-        email: 'beta@example.com',
-        displayName: 'Beta',
-        photoURL: null,
         role: 'admin',
         createdAt: '2026-08-20T00:00:00.000Z',
         lastActiveAt: '2026-09-02T00:00:00.000Z',
@@ -458,6 +449,7 @@ describe('M5 Admin RBAC: Positive Workflows & Audit Logging', () => {
     expect(body.data.items).toHaveLength(2);
     expect(body.data.items[0].uid).toBe('user_alpha');
     expect(body.data.items[0].role).toBe('user');
+    expect(body.data.items[0]).not.toHaveProperty('email');
     expect(body.data.items[1].uid).toBe('user_beta');
     expect(body.data.items[1].role).toBe('admin');
     expect(body.data.nextCursor).toBe('cursor_beta');
@@ -471,7 +463,7 @@ describe('M5 Admin RBAC: Positive Workflows & Audit Logging', () => {
     );
   });
 
-  it('POS-ADM-API-03: Admin POST /api/admin/users/:targetUid/role updates claim, revokes tokens, updates display mirror, and logs role.grant audit entry', async () => {
+  it('POS-ADM-API-03: Admin POST /api/admin/users/:targetUid/role writes display mirror, updates claim, revokes tokens, and logs role.grant audit entry', async () => {
     const res = await call('/api/admin/users/target_user_2/role', {
       method: 'POST',
       token: 'admin-token',
@@ -482,11 +474,13 @@ describe('M5 Admin RBAC: Positive Workflows & Audit Logging', () => {
     const body = await res.json();
     expect(body.data?.ok).toBe(true);
 
-    // 1. Firebase Custom Claims updated
+    // 1. Display mirror written first
+    expect(usersService.updateUserRole).toHaveBeenCalledWith('target_user_2', 'admin');
+    // 2. Firebase Custom Claims updated
     expect(setCustomUserClaims).toHaveBeenCalledWith('target_user_2', { role: 'admin' });
-    // 2. Refresh tokens revoked immediately
+    // 3. Refresh tokens revoked immediately
     expect(revokeRefreshTokens).toHaveBeenCalledWith('target_user_2');
-    // 3. Audit log entry recorded with role.grant
+    // 4. Audit log entry recorded with role.grant
     expect(audit.logAuditEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         actorUid: 'admin_user_1',
@@ -507,6 +501,7 @@ describe('M5 Admin RBAC: Positive Workflows & Audit Logging', () => {
     const body = await res.json();
     expect(body.data?.ok).toBe(true);
 
+    expect(usersService.updateUserRole).toHaveBeenCalledWith('target_admin_3', 'user');
     expect(setCustomUserClaims).toHaveBeenCalledWith('target_admin_3', { role: 'user' });
     expect(revokeRefreshTokens).toHaveBeenCalledWith('target_admin_3');
     expect(audit.logAuditEvent).toHaveBeenCalledWith(
@@ -533,5 +528,47 @@ describe('M5 Admin RBAC: Positive Workflows & Audit Logging', () => {
     );
     const passedLimit = usersService.listUsers.mock.calls[0][0].limit;
     expect(passedLimit).toBeLessThanOrEqual(50);
+  });
+
+  it('NEG-ADM-API-15: Role update failure in Firestore aborts before modifying custom claims (Fail-Closed Ordering)', async () => {
+    usersService.updateUserRole.mockRejectedValueOnce(new Error('Firestore database write failed'));
+
+    const res = await call('/api/admin/users/target_user_fail/role', {
+      method: 'POST',
+      token: 'admin-token',
+      body: JSON.stringify({ role: 'admin' }),
+    });
+
+    expect(res.status).toBe(500);
+    expect(usersService.updateUserRole).toHaveBeenCalledWith('target_user_fail', 'admin');
+    // Custom claims and token revocation MUST NOT have been called
+    expect(setCustomUserClaims).not.toHaveBeenCalled();
+    expect(revokeRefreshTokens).not.toHaveBeenCalled();
+    expect(audit.logAuditEvent).not.toHaveBeenCalled();
+  });
+
+  it('NEG-ADM-API-16: Rate limiting is actively enforced on /api/admin/* endpoints', async () => {
+    // Make rapid requests to exhaust rate limiter bucket
+    aggregatesService.getAdminStats.mockResolvedValue({
+      totalEntries: 10,
+      activeUsers: 6,
+      suppressed: false,
+      moodDistribution: { joyful: 10, calm: 0, neutral: 0, anxious: 0, sad: 0, angry: 0, mixed: 0 },
+      averageMoodScore: 4.0,
+      dailyTrend: [],
+    });
+
+    const promises = Array.from({ length: 70 }, () =>
+      call('/api/admin/stats', { token: 'admin-token' })
+    );
+    const responses = await Promise.all(promises);
+    const statusCodes = responses.map((r) => r.status);
+
+    expect(statusCodes).toContain(429);
+    const rateLimitedRes = responses.find((r) => r.status === 429);
+    if (rateLimitedRes) {
+      const body = await rateLimitedRes.json();
+      expect(body.error?.code).toBe('TOO_MANY_REQUESTS');
+    }
   });
 });

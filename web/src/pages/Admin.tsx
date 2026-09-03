@@ -41,7 +41,7 @@ import {
   adminApi,
   describeError,
   type AdminStatsResponse,
-  type AdminUserItem,
+  type AdminUserSummary,
 } from '../lib/adminApi';
 
 const MOOD_THEME: Record<
@@ -107,7 +107,7 @@ const MOOD_THEME: Record<
 };
 
 interface RoleChangeModalProps {
-  targetUser: AdminUserItem | null;
+  targetUser: AdminUserSummary | null;
   newRole: UserRole | null;
   isSubmitting: boolean;
   error: string | null;
@@ -126,7 +126,7 @@ const RoleChangeModal: React.FC<RoleChangeModalProps> = ({
   if (!targetUser || !newRole) return null;
 
   const isGranting = newRole === 'admin';
-  const displayName = targetUser.displayName || targetUser.email || targetUser.uid;
+  const displayName = targetUser.uid;
 
   return (
     <div
@@ -148,7 +148,7 @@ const RoleChangeModal: React.FC<RoleChangeModalProps> = ({
               {isGranting ? 'Grant Admin Privileges' : 'Revoke Admin Privileges'}
             </h3>
             <p className="mt-1 text-xs text-[#7D756D] leading-relaxed">
-              Changing role for <span className="font-semibold text-[#4A443F]">{displayName}</span> to{' '}
+              Changing role for <span className="font-semibold text-[#4A443F] font-mono">{displayName}</span> to{' '}
               <span className={`font-bold ${isGranting ? 'text-amber-800' : 'text-[#4A443F]'}`}>
                 {isGranting ? 'Admin' : 'Standard User'}
               </span>
@@ -213,7 +213,7 @@ export const Admin: React.FC<AdminPageProps> = () => {
   const { user } = useAuth();
 
   const [stats, setStats] = useState<AdminStatsResponse | null>(null);
-  const [users, setUsers] = useState<AdminUserItem[]>([]);
+  const [users, setUsers] = useState<AdminUserSummary[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -221,7 +221,7 @@ export const Admin: React.FC<AdminPageProps> = () => {
   const [copiedUid, setCopiedUid] = useState<string | null>(null);
 
   // Role modification modal state
-  const [targetUser, setTargetUser] = useState<AdminUserItem | null>(null);
+  const [targetUser, setTargetUser] = useState<AdminUserSummary | null>(null);
   const [newRole, setNewRole] = useState<UserRole | null>(null);
   const [isUpdatingRole, setIsUpdatingRole] = useState(false);
   const [roleError, setRoleError] = useState<string | null>(null);
@@ -272,7 +272,7 @@ export const Admin: React.FC<AdminPageProps> = () => {
     });
   };
 
-  const initiateRoleChange = (item: AdminUserItem) => {
+  const initiateRoleChange = (item: AdminUserSummary) => {
     if (user && item.uid === user.uid) {
       return; // Anti-self-demotion prevented in UI
     }
@@ -293,7 +293,7 @@ export const Admin: React.FC<AdminPageProps> = () => {
         prev.map((u) => (u.uid === targetUser.uid ? { ...u, role: newRole } : u))
       );
       setToastMessage(
-        `Successfully changed role for ${targetUser.email || targetUser.uid} to ${newRole}. Session tokens revoked.`
+        `Successfully changed role for ${targetUser.uid} to ${newRole}. Session tokens revoked.`
       );
       setTimeout(() => setToastMessage(null), 5000);
       setTargetUser(null);
@@ -777,8 +777,7 @@ export const Admin: React.FC<AdminPageProps> = () => {
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-[#EFECE6] border-b border-[#E2DDD5] text-[#5A5A40] font-semibold">
-                    <th className="py-3 px-4">User</th>
-                    <th className="py-3 px-4">UID</th>
+                    <th className="py-3 px-4">User UID</th>
                     <th className="py-3 px-4">Created</th>
                     <th className="py-3 px-4">Last Active</th>
                     <th className="py-3 px-4 text-center">Reflections</th>
@@ -789,7 +788,7 @@ export const Admin: React.FC<AdminPageProps> = () => {
                 <tbody className="divide-y divide-[#E2DDD5] bg-[#FAF8F5]">
                   {users.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-8 text-center text-xs text-[#8C827A] italic">
+                      <td colSpan={6} className="py-8 text-center text-xs text-[#8C827A] italic">
                         No registered users found in the directory.
                       </td>
                     </tr>
@@ -798,7 +797,7 @@ export const Admin: React.FC<AdminPageProps> = () => {
                       const isSelf = Boolean(user && item.uid === user.uid);
                       const isAdmin = item.role === 'admin';
                       const createdDate = new Date(item.createdAt);
-                      const lastActiveDate = new Date(item.lastActiveAt);
+                      const lastActiveDate = item.lastActiveAt ? new Date(item.lastActiveAt) : null;
 
                       return (
                         <tr
@@ -807,61 +806,40 @@ export const Admin: React.FC<AdminPageProps> = () => {
                             isSelf ? 'bg-amber-50/30' : ''
                           }`}
                         >
-                          {/* User Avatar + Display Name / Email */}
+                          {/* User UID */}
                           <td className="py-3 px-4">
-                            <div className="flex items-center space-x-3">
-                              {item.photoURL ? (
-                                <img
-                                  src={item.photoURL}
-                                  alt={item.displayName || 'User avatar'}
-                                  className="w-7 h-7 rounded-full border border-[#DCD3C6] object-cover"
-                                  referrerPolicy="no-referrer"
-                                />
-                              ) : (
-                                <div className="w-7 h-7 rounded-full bg-[#EAE5DD] text-[#5A5A40] flex items-center justify-center font-bold text-[10px]">
-                                  <UserIcon className="w-3.5 h-3.5" />
-                                </div>
-                              )}
-                              <div className="truncate max-w-[160px] sm:max-w-xs">
-                                <div className="font-semibold text-[#4A443F] truncate">
-                                  {item.displayName || 'Anonymous User'}
-                                  {isSelf && (
-                                    <span className="ml-1.5 text-[10px] font-bold text-amber-900 bg-amber-100 px-1.5 py-0.2 rounded">
-                                      You
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="text-[11px] text-[#8C827A] truncate font-mono">
-                                  {item.email || 'No email provided'}
-                                </div>
+                            <div className="flex items-center space-x-2.5">
+                              <div className="w-7 h-7 rounded-full bg-[#EAE5DD] text-[#5A5A40] flex items-center justify-center font-bold text-[10px] shrink-0">
+                                <UserIcon className="w-3.5 h-3.5" />
                               </div>
-                            </div>
-                          </td>
-
-                          {/* UID */}
-                          <td className="py-3 px-4">
-                            <div className="flex items-center space-x-1.5">
-                              <span className="font-mono text-[10px] text-[#7D756D] bg-[#EFECE6] px-1.5 py-0.5 rounded border border-[#DCD3C6]">
-                                {item.uid.slice(0, 8)}…{item.uid.slice(-4)}
-                              </span>
-                              <button
-                                onClick={() => handleCopyUid(item.uid)}
-                                title="Copy Full UID"
-                                className="p-1 text-[#8C827A] hover:text-[#4A443F] rounded transition-colors cursor-pointer"
-                              >
-                                {copiedUid === item.uid ? (
-                                  <Check className="w-3 h-3 text-emerald-600" />
-                                ) : (
-                                  <Copy className="w-3 h-3" />
+                              <div className="flex items-center space-x-1.5 min-w-0">
+                                <span className="font-mono text-xs text-[#4A443F] bg-[#EFECE6] px-2 py-0.5 rounded border border-[#DCD3C6] truncate">
+                                  {item.uid}
+                                </span>
+                                {isSelf && (
+                                  <span className="text-[10px] font-bold text-amber-900 bg-amber-100 px-1.5 py-0.5 rounded shrink-0">
+                                    You
+                                  </span>
                                 )}
-                              </button>
+                                <button
+                                  onClick={() => handleCopyUid(item.uid)}
+                                  title="Copy Full UID"
+                                  className="p-1 text-[#8C827A] hover:text-[#4A443F] rounded transition-colors cursor-pointer shrink-0"
+                                >
+                                  {copiedUid === item.uid ? (
+                                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                  ) : (
+                                    <Copy className="w-3.5 h-3.5" />
+                                  )}
+                                </button>
+                              </div>
                             </div>
                           </td>
 
                           {/* Created Date */}
                           <td className="py-3 px-4 text-[#7D756D]">
                             <div className="flex items-center space-x-1 text-[11px]">
-                              <Calendar className="w-3 h-3 text-[#8C827A]" />
+                              <Calendar className="w-3.5 h-3.5 text-[#8C827A]" />
                               <span>
                                 {!Number.isNaN(createdDate.getTime())
                                   ? createdDate.toLocaleDateString()
@@ -873,11 +851,11 @@ export const Admin: React.FC<AdminPageProps> = () => {
                           {/* Last Active */}
                           <td className="py-3 px-4 text-[#7D756D]">
                             <div className="flex items-center space-x-1 text-[11px]">
-                              <Clock className="w-3 h-3 text-[#8C827A]" />
+                              <Clock className="w-3.5 h-3.5 text-[#8C827A]" />
                               <span>
-                                {!Number.isNaN(lastActiveDate.getTime())
+                                {lastActiveDate && !Number.isNaN(lastActiveDate.getTime())
                                   ? lastActiveDate.toLocaleDateString()
-                                  : item.lastActiveAt}
+                                  : item.lastActiveAt || 'Never'}
                               </span>
                             </div>
                           </td>

@@ -2,11 +2,18 @@ import { api, ApiError } from './api';
 import type {
   AdminStatsResponse,
   AdminUsersResponse,
+  AdminUserSummary,
   AdminUserItem,
   UserRole,
 } from '@journal/shared';
 
-export type { AdminStatsResponse, AdminUsersResponse, AdminUserItem, UserRole };
+export type {
+  AdminStatsResponse,
+  AdminUsersResponse,
+  AdminUserSummary,
+  AdminUserItem,
+  UserRole,
+};
 
 export interface ListUsersParams {
   limit?: number;

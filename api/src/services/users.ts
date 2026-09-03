@@ -1,4 +1,5 @@
 import { db, FieldValue } from '../firebase.js';
+import type { AdminUserSummary } from '@journal/shared';
 
 export interface EnsureUserInput {
   uid: string;
@@ -92,7 +93,7 @@ export interface ListUsersOptions {
 
 export const listUsers = async (
   opts: ListUsersOptions = {}
-): Promise<{ items: UserProfile[]; nextCursor: string | null }> => {
+): Promise<{ items: AdminUserSummary[]; nextCursor: string | null }> => {
   const limit = Math.min(Math.max(1, opts.limit || 20), 50);
   let query = db.collection('users').orderBy('createdAt', 'desc').limit(limit + 1);
 
@@ -108,7 +109,7 @@ export const listUsers = async (
   const hasMore = docs.length > limit;
   const pageDocs = hasMore ? docs.slice(0, limit) : docs;
 
-  const items: UserProfile[] = pageDocs.map((doc) => {
+  const items: AdminUserSummary[] = pageDocs.map((doc) => {
     const data = doc.data() || {};
     let createdAt = new Date().toISOString();
     if (data.createdAt?.toDate) {
@@ -117,7 +118,7 @@ export const listUsers = async (
       createdAt = data.createdAt;
     }
 
-    let lastActiveAt = new Date().toISOString();
+    let lastActiveAt: string | null = null;
     if (data.lastActiveAt?.toDate) {
       lastActiveAt = data.lastActiveAt.toDate().toISOString();
     } else if (typeof data.lastActiveAt === 'string') {
@@ -126,13 +127,13 @@ export const listUsers = async (
 
     return {
       uid: doc.id,
-      email: typeof data.email === 'string' ? data.email : null,
-      displayName: typeof data.displayName === 'string' ? data.displayName : null,
-      photoURL: typeof data.photoURL === 'string' ? data.photoURL : null,
       role: data.role === 'admin' ? 'admin' : 'user',
       createdAt,
       lastActiveAt,
-      entryCount: typeof data.entryCount === 'number' ? data.entryCount : 0,
+      entryCount:
+        typeof data.entryCount === 'number' && Number.isFinite(data.entryCount)
+          ? Math.max(0, Math.floor(data.entryCount))
+          : 0,
     };
   });
 

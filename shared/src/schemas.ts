@@ -107,7 +107,9 @@ export type ReverseGeocodeInput = z.infer<typeof ReverseGeocodeSchema>;
 /** Firestore document ids as they appear in a path parameter. */
 export const DocIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
 
-export const UserRoleSchema = z.enum(['user', 'admin']);
+export const RoleSchema = z.enum(['user', 'admin']);
+export type Role = z.infer<typeof RoleSchema>;
+export const UserRoleSchema = RoleSchema;
 export type UserRole = z.infer<typeof UserRoleSchema>;
 
 export const SetUserRoleSchema = z.object({
@@ -186,17 +188,16 @@ export const AdminStatsResponseSchema = z.object({
 }).strict();
 export type AdminStatsResponse = z.infer<typeof AdminStatsResponseSchema>;
 
-export const AdminUserItemSchema = z.object({
+export const AdminUserSummarySchema = z.object({
   uid: z.string(),
-  email: z.string().nullable(),
-  displayName: z.string().nullable(),
-  photoURL: z.string().nullable(),
-  role: UserRoleSchema,
+  role: RoleSchema,
   createdAt: z.string(),
-  lastActiveAt: z.string(),
+  lastActiveAt: z.string().nullable().optional(),
   entryCount: z.number().int().nonnegative(),
 }).strict();
-export type AdminUserItem = z.infer<typeof AdminUserItemSchema>;
+export type AdminUserSummary = z.infer<typeof AdminUserSummarySchema>;
+export const AdminUserItemSchema = AdminUserSummarySchema;
+export type AdminUserItem = AdminUserSummary;
 
 export const AdminUsersQuerySchema = z.object({
   limit: z.coerce.number().int().positive().catch(DEFAULT_PAGE_SIZE)
@@ -209,7 +210,7 @@ export const AdminUsersListQuerySchema = AdminUsersQuerySchema;
 export type AdminUsersListQueryInput = AdminUsersQueryInput;
 
 export const AdminUsersResponseSchema = z.object({
-  items: z.array(AdminUserItemSchema),
+  items: z.array(AdminUserSummarySchema),
   nextCursor: z.string().nullable(),
 }).strict();
 export type AdminUsersResponse = z.infer<typeof AdminUsersResponseSchema>;

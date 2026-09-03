@@ -20,6 +20,8 @@ dist/
 build/
 .vite/
 *.tsbuildinfo
+web/vite.config.js
+web/vite.config.d.ts
 
 # ---- Firebase / GCP local state ----
 .firebase/

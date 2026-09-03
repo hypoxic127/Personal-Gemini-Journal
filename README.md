@@ -160,6 +160,15 @@ an identity: another user's session id simply does not exist under your subtree,
 | `POST /api/sessions/:id/messages` | AI | One turn: user message persisted **first**, then the model call |
 | `POST /api/sessions/:id/finalize` | AI | Conversation → structured entry, via `responseSchema` + Zod |
 | `GET /api/entries` · `GET /api/entries/:id` | standard | Saved entries, cursor-paginated |
+| `GET /api/insights/trends` | standard | Mood scores and emotional trajectory analytics |
+| `POST /api/places/reverse-geocode` | standard | Server-side reverse geocoding; precision degraded to ~1 km |
+| `DELETE /api/places/location-history` | standard | Bulk clears coordinates across all entries; writes audit log |
+| `GET /api/config` | standard | Maps JavaScript browser key delivered at runtime to authenticated callers |
+| `GET /api/config/public` | none | Public Firebase identifier only (`apiKey`, `appId`); never a Maps key |
+| `POST /api/auth/sync` | standard | Session sync and user profile initialization |
+| `GET /api/admin/stats` | admin | Population mood aggregates with small-sample suppression (< 5 active users) |
+| `GET /api/admin/users` | admin | Account metadata (`AdminUserSummary[]`) — zero PII / content |
+| `POST /api/admin/users/:uid/role` | admin | Role toggle with anti-self-demotion, anti-self-elevation, and token revocation |
 
 **AI** routes carry the stricter per-uid bucket (10 burst, one refill per 5s). Input is
 truncated to 4000 characters **server-side**, history is capped at 20 turns, and output

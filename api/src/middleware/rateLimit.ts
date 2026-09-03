@@ -10,6 +10,7 @@ interface RateLimitOptions {
   capacity?: number;       // Max tokens in the bucket (burst capacity)
   refillRate?: number;     // Tokens added per second
   windowMs?: number;       // Window for reference / cleanup
+  maxRequests?: number;
 }
 
 const buckets = new Map<string, TokenBucket>();
@@ -26,8 +27,12 @@ setInterval(() => {
 }, 5 * 60 * 1000).unref();
 
 export const createRateLimiter = (options: RateLimitOptions = {}): RequestHandler => {
-  const capacity = options.capacity ?? 30; // 30 requests burst default
-  const refillRate = options.refillRate ?? 1; // 1 token / sec (60 req/min)
+  const capacity = options.capacity ?? options.maxRequests ?? 30; // 30 requests burst default
+  const refillRate =
+    options.refillRate ??
+    (options.maxRequests && options.windowMs
+      ? options.maxRequests / (options.windowMs / 1000)
+      : 1); // 1 token / sec (60 req/min)
 
   return (req: Request, res: Response, next: NextFunction): void => {
     const key = req.user?.uid || req.ip || 'anonymous';
