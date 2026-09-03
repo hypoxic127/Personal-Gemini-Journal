@@ -332,15 +332,17 @@ Then sign out and back in so the new custom claim lands in your token.
 ## Verification evidence
 
 ```bash
-curl -s "$URL/healthz"                                              # {"ok":true}
+curl -s "$URL/health"                                               # {"ok":true} (or /api/healthz)
 curl -s -o /dev/null -w "%{http_code}\n" "$URL/api/entries"         # 401 — unauthenticated
 curl -s -o /dev/null -w "%{http_code}\n" \
-  -H "Authorization: Bearer $USER_TOKEN" "$URL/api/admin/stats"     # 403 — not an admin
+  -H "Authorization: Bearer $NON_ADMIN_TOKEN" "$URL/api/admin/stats" # 403 — not an admin
 curl -s -o /dev/null -w "%{http_code}\n" "$URL/api/config"          # 401 — Maps browser key needs a token
 curl -s "$URL/api/config/public"                                    # Firebase identifier only, never a Maps key
 grep -rc "AIza" web/dist/ | grep -v ':0$' || echo "0 — no key in the bundle"
 gcloud run services describe "$SERVICE" --region="$REGION" \
   --format="value(metadata.labels)"                                 # dev-tutorial=...
+gcloud run services describe "$SERVICE" --region="$REGION" \
+  --format="value(status.latestReadyRevisionName)"                  # journal-app-00010-jpc
 ```
 
 ![Cloud Run Production Verification Evidence](docs/evidence/terminal-verification.png)
