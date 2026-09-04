@@ -525,6 +525,7 @@ export const Admin: React.FC<AdminPageProps> = () => {
                         fill="url(#adminTrendGradient)"
                         dot={{ fill: '#8A6534', r: 3 }}
                         activeDot={{ r: 5, fill: '#644721' }}
+                        isAnimationActive={false}
                       />
                     </AreaChart>
                   </ResponsiveContainer>
@@ -584,6 +585,7 @@ export const Admin: React.FC<AdminPageProps> = () => {
                           innerRadius={42}
                           outerRadius={68}
                           paddingAngle={3}
+                          isAnimationActive={false}
                         >
                           {chartDistribution.map((entry) => (
                             <Cell

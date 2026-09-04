@@ -69,6 +69,11 @@ That is a deliberate trade-off, not a missing feature. An admin dashboard that r
 
 This is enforced in `firestore.rules`, not by backend convention. A negative test proves it: **a token carrying `role: "admin"` is denied on `users/A/entries/e1`.**
 
+The admin console is not reachable from a normal sign-in — the navigation entry renders only for a token carrying role: "admin", and the server rejects the routes regardless of what the UI shows. Granting an evaluator that claim would mean elevating an unknown account over real users' aggregate data, so the console is documented here with evidence instead: docs/evidence/admin-*.png, plus the rules test NEG-ADM-04 which proves an admin-claim token is denied on another user's entries.
+
+![Admin Console Telemetry Dashboard](docs/evidence/admin-dashboard.png)
+![Admin Privacy Preservation Notice](docs/evidence/admin-suppression.png)
+
 ---
 
 ## Security design
@@ -343,10 +348,19 @@ gcloud run services describe "$SERVICE" --region="$REGION" \
   --format="value(metadata.labels)"                                 # dev-tutorial=cloud-run-ai-challenge
 gcloud run services describe "$SERVICE" --region="$REGION" \
   --format="value(status.latestReadyRevisionName)"                  # journal-app-00011-n4v
+
+# Admin attempting to read another user's journal entry via verified admin token
+curl -s -o /dev/null -w "%{http_code}\n" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  "$URL/api/entries/<userB_entryId>"                                # 404/403 — backend keys on req.user.uid
+
+# Client SDK directly probing Firestore, bypassing backend API (rules layer defense)
+firebase emulators:exec --only firestore "pnpm test:rules" 2>&1 | grep NEG-ADM-04
 ```
 
 ![Cloud Run Production Verification Evidence](docs/evidence/terminal-verification.png)
 ![Cloud Run Required Challenge Labels Verification](docs/evidence/labels-verification.png)
+![Admin Forbidden from User Content Evidence](docs/evidence/admin-403.png)
 
 ---
 
