@@ -17,15 +17,21 @@
  *   npx tsx scripts/grant-admin.ts --uid <uid>
  */
 
-import dotenv from 'dotenv';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-dotenv.config({ path: path.resolve(__dirname, '../api/.env') });
+const envPath = path.resolve(__dirname, '../api/.env');
+if (fs.existsSync(envPath) && typeof process.loadEnvFile === 'function') {
+  process.loadEnvFile(envPath);
+}
 
-import { auth, db, FieldValue } from '../api/src/firebase.js';
+process.env.GCP_PROJECT_ID = process.env.GCP_PROJECT_ID || 'gemini-journal-62441';
+process.env.GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'cli-bootstrap-key';
+
+const { auth, db, FieldValue } = await import('../api/src/firebase.js');
 
 async function grantAdmin(uid: string): Promise<void> {
   if (!uid || typeof uid !== 'string' || uid.trim().length === 0) {
