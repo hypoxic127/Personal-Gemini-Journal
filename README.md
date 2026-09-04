@@ -69,7 +69,7 @@ That is a deliberate trade-off, not a missing feature. An admin dashboard that r
 
 This is enforced in `firestore.rules`, not by backend convention. A negative test proves it: **a token carrying `role: "admin"` is denied on `users/A/entries/e1`.**
 
-The admin console is not reachable from a normal sign-in — the navigation entry renders only for a token carrying role: "admin", and the server rejects the routes regardless of what the UI shows. Granting an evaluator that claim would mean elevating an unknown account over real users' aggregate data, so the console is documented here with evidence instead: docs/evidence/admin-*.png, plus the rules test NEG-ADM-04 which proves an admin-claim token is denied on another user's entries.
+The admin console is not reachable from a normal sign-in — the navigation entry renders only for a token carrying `role: "admin"`, and the server rejects the routes regardless of what the UI shows. Granting an evaluator that claim would mean elevating an unknown account over real users' aggregate data, so the console is documented here with evidence instead: `docs/evidence/admin-*.png`, plus the rules test `NEG-ADM-04` which proves an admin-claim token is denied on another user's entries.
 
 ![Admin Console Telemetry Dashboard](docs/evidence/admin-dashboard.png)
 ![Admin Privacy Preservation Notice](docs/evidence/admin-suppression.png)
@@ -122,6 +122,8 @@ Every one of these has a corresponding negative test, and each can be demonstrat
 The Phase 1 security directives were configured in Google AI Studio's Custom Instructions and used to generate the initial implementation. Development then moved into Google Antigravity and Claude Code along the officially suggested **Porting to Antigravity** path. All three read the **same** constitution ([`AGENTS.md`](AGENTS.md) / [`CLAUDE.md`](CLAUDE.md)), so AI-generated code is bound by identical rules in every environment.
 
 It covers STRIDE threat modeling, identity and authorization, Firestore isolation, secret management, secure coding standards, three per-integration directives (Maps / RBAC / Notification), an explicit "never generate" list, and a definition of done.
+
+![Google AI Studio Custom Instructions Compliance Evidence](docs/evidence/ai-studio/ai-studio-custom-instructions.png)
 
 ### Antigravity porting: Skills, TDD, Git hooks
 
