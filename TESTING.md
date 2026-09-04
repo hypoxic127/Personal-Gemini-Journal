@@ -1,4 +1,4 @@
-﻿# TESTING.md — User Interaction & Walkthrough Test Catalogue
+# TESTING.md — User Interaction & Walkthrough Test Catalogue
 
 > **Mandated Robustness Standard (Challenge Production Directives §6)**:  
 > *"Every type of process and user interaction that a user can see or trigger must have a corresponding test case written out."*
@@ -165,9 +165,11 @@ bash scripts/security-check.sh
 
 ### Key Automated Test Mapping
 
-- **Auth & Rate Limiting**: `api/test/auth.test.ts`, `api/test/security-headers.test.ts`
-- **Session & Multi-turn Chat**: `api/test/sessions.routes.test.ts`, `api/test/sessions.service.test.ts`
-- **Gemini Model Fallback & Finalize**: `api/test/gemini.service.test.ts`, `api/test/gemini.fallback.test.ts`
+- **Auth & Rate Limiting**: `api/test/auth.test.ts`, `api/test/security-headers.test.ts`, `api/test/config.test.ts`
+- **Session & Multi-turn Chat**: `api/test/sessions.routes.test.ts`, `api/test/verification-hermetic.test.ts`, `api/test/sanitize.test.ts`
+- **Gemini Model Fallback & Finalize**: `api/test/gemini.test.ts`, `api/test/challenger-adversarial.test.ts`
 - **Data Isolation & Firestore Rules**: `test/firestore.rules.test.ts`
-- **Location & Geocoding**: `api/test/places.routes.test.ts`, `api/test/location.service.test.ts`
-- **Admin RBAC & Small-Sample Suppression**: `api/test/admin.routes.test.ts`, `api/test/aggregates.service.test.ts`, `api/test/challenger-m5-adversarial.test.ts`
+- **Mood Analytics & Insights**: `api/test/insights.routes.test.ts`, `api/test/insights.service.test.ts`, `api/test/insights.adversarial.test.ts`
+- **Location & Geocoding**: `api/test/places.routes.test.ts`, `api/test/places.service.test.ts`, `api/test/places.adversarial.test.ts`
+- **Admin RBAC & Small-Sample Suppression**: `api/test/admin.routes.test.ts`, `api/test/aggregates.service.test.ts`, `api/test/admin.frontend-integration.test.ts`, `api/test/challenger-m5-adversarial.test.ts`
+- **Frontend Components & Theme**: `web/src/components/LandingPage.test.tsx`, `web/src/components/ReflectionWorkspace.test.tsx`, `web/src/lib/moodTheme.test.ts`
