@@ -73,6 +73,7 @@ The admin console is not reachable from a normal sign-in — the navigation entr
 
 ![Admin Console Telemetry Dashboard](docs/evidence/admin-dashboard.png)
 ![Admin Privacy Preservation Notice](docs/evidence/admin-suppression.png)
+![Admin Forbidden from User Content Proof](docs/evidence/admin-403.png)
 
 ---
 
